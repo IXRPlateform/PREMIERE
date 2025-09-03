@@ -16,33 +16,33 @@ init(autoreset=True)
 
 def stabilize_floor_contact(allFrameHumans, contact_threshold=0.005, max_offset=0.02, alpha=0.2, Kp=0.8, Kd=0.4):
     """
-    Stabilise le contact avec le sol en corrigeant uniquement à la hausse via un contrôleur PD adaptatif.
+    Stabilizes floor contact by correcting only upwards using an adaptive PD controller.
     
-    Pour chaque frame, la procédure est la suivante :
-      1. Détecter le niveau de sol à partir des joints de pied (indices typiques pour la cheville et l'orteil).
-      2. Lisser la trajectoire du sol avec un filtre exponentiel.
-      3. Calculer un niveau global robuste (5e percentile sur l’ensemble des frames).
-      4. Pour chaque frame, définir le niveau désiré comme le maximum entre le niveau lissé et le niveau global.
-      5. Pour la frame, calculer pour chaque humain l'erreur = (niveau désiré - position la plus basse du pied).
-         Ensuite, agréger ces erreurs (par exemple en prenant la valeur maximale) pour obtenir une erreur globale.
-      6. Calculer l’offset via une loi PD : offset = Kp * erreur + Kd * (erreur - erreur_précédente), puis le clipper à max_offset.
-      7. Appliquer cet offset à tous les humains dont l’erreur individuelle dépasse le seuil contact_threshold.
+    For each frame, the procedure is as follows:
+      1. Detect the floor level from foot joints (typical indices for ankle and toe).
+      2. Smooth the floor trajectory with an exponential filter.
+      3. Compute a robust global level (5th percentile over all frames).
+      4. For each frame, set the desired level as the maximum between the smoothed level and the global level.
+      5. For the frame, for each human, compute error = (desired level - lowest foot position).
+         Then, aggregate these errors (e.g., by taking the maximum value) to obtain a global error.
+      6. Compute the offset via a PD law: offset = Kp * error + Kd * (error - previous_error), then clip to max_offset.
+      7. Apply this offset to all humans whose individual error exceeds the contact_threshold.
     
     Args:
-        allFrameHumans: Liste de frames, chaque frame étant une liste de dictionnaires représentant des humains.
-        contact_threshold: Seuil minimal pour déclencher une correction pour un humain.
-        max_offset: Offset maximal autorisé par frame.
-        alpha: Coefficient de lissage exponentiel pour la trajectoire du sol.
-        Kp: Gain proportionnel du contrôleur PD.
-        Kd: Gain dérivé du contrôleur PD.
+        allFrameHumans: List of frames, each frame being a list of dictionaries representing humans.
+        contact_threshold: Minimum threshold to trigger a correction for a human.
+        max_offset: Maximum allowed offset per frame.
+        alpha: Exponential smoothing coefficient for the floor trajectory.
+        Kp: Proportional gain of the PD controller.
+        Kd: Derivative gain of the PD controller.
         
     Returns:
-        allFrameHumans avec les positions verticales (Y) ajustées.
+        allFrameHumans with adjusted vertical (Y) positions.
     """
-    # Indices typiques pour la cheville et l'orteil dans SMPLX
+    # Typical indices for ankle and toe in SMPLX
     foot_joints = [7, 8, 10, 11]
 
-    # 1. Détecter le niveau du sol par frame à partir des pieds
+    # 1. Detect the floor level per frame from feet
     floor_levels = []
     for humans in allFrameHumans:
         if len(humans) == 0:
@@ -54,7 +54,7 @@ def stabilize_floor_contact(allFrameHumans, contact_threshold=0.005, max_offset=
             lowest_points.append(np.min(foot_y))
         floor_levels.append(np.min(lowest_points) if lowest_points else None)
     
-    # 2. Lisser la trajectoire du sol par filtre exponentiel
+    # 2. Smooth the floor trajectory with exponential filter
     smoothed_floor = []
     prev = None
     for level in floor_levels:
@@ -67,7 +67,7 @@ def stabilize_floor_contact(allFrameHumans, contact_threshold=0.005, max_offset=
             prev = alpha * level + (1 - alpha) * prev
             smoothed_floor.append(prev)
     
-    # 3. Calcul du niveau global du sol (5e percentile sur tous les pieds)
+    # 3. Compute the global floor level (5th percentile over all feet)
     all_foot_y = []
     for humans in allFrameHumans:
         for human in humans:
@@ -75,42 +75,42 @@ def stabilize_floor_contact(allFrameHumans, contact_threshold=0.005, max_offset=
             all_foot_y.extend(foot_y)
     global_floor = np.percentile(all_foot_y, 5) if all_foot_y else 0.0
 
-    # 4. Initialisation de l'erreur globale précédente pour le contrôle PD
+    # 4. Initialize previous global error for PD control
     previous_global_error = 0.0
 
-    # 5. Itération sur les frames (en supposant que la séquence est chronologique)
+    # 5. Iterate over frames (assuming the sequence is chronological)
     for i, humans in enumerate(allFrameHumans):
         if len(humans) == 0 or smoothed_floor[i] is None:
             continue
-        # Le niveau désiré est le maximum entre le niveau lissé et le niveau global
+        # Desired level is the maximum between smoothed and global level
         desired_floor = max(smoothed_floor[i], global_floor)
         
-        # Pour chaque humain de la frame, calculer l'erreur individuelle
+        # For each human in the frame, compute individual error
         errors = []
         for human in humans:
             foot_y = human['j3d_smplx'][foot_joints, 1]
             lowest_foot = np.min(foot_y)
             errors.append(desired_floor - lowest_foot)
         
-        # Agréger l'erreur de la frame (par exemple, prendre la valeur maximale)
+        # Aggregate frame error (e.g., take the maximum value)
         frame_error = max(errors) if errors else 0.0
         
-        # Calcul de la dérivée de l'erreur par rapport à la frame précédente
+        # Compute error derivative with respect to previous frame
         error_derivative = frame_error - previous_global_error
         
-        # Calcul de l'offset via le contrôleur PD
+        # Compute offset via PD controller
         offset = Kp * frame_error + Kd * error_derivative
-        # On corrige uniquement à la hausse (offset positif) et on limite l'amplitude
+        # Only correct upwards (positive offset) and limit amplitude
         offset = np.clip(offset, 0, max_offset)
         
-        # Application de la correction pour chaque humain si son erreur individuelle dépasse le seuil
+        # Apply correction for each human if their individual error exceeds the threshold
         for human in humans:
             foot_y = human['j3d_smplx'][foot_joints, 1]
             lowest_foot = np.min(foot_y)
             individual_error = desired_floor - lowest_foot
             if individual_error > contact_threshold:
                 human['j3d_smplx'][:, 1] += offset
-                # Mise à jour de la translation (ici, le joint 15 est utilisé comme référence)
+                # Update translation (here, joint 15 is used as reference)
                 human['transl'] = human['j3d_smplx'][15]
         
         previous_global_error = frame_error
@@ -129,7 +129,7 @@ def main():
     moge_pkl = sys.argv[4]
     factor = -float(sys.argv[5])  # Now mandatory
 
-    # Charger les données
+    # Load data
     dataPKL, vggtPKL, mogePKL = loadPkl3(input_pkl, vggt_pkl, moge_pkl)
     allFrameHumans = dataPKL['allFrameHumans']
     

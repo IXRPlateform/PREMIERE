@@ -58,10 +58,7 @@ def main():
 
     min_y = 0
     all3DJoints = np.array(all3DJoints)
-    # y_coords = -all3DJoints[:, :, 1].flatten()
-    # min_y = np.min(y_coords)
-    # print ("min_y: ", min_y)
-      
+
     # Define foot joint indices in SMPLX model
     foot_joints = [7, 8, 10, 11]  # Left ankle, right ankle, left toe, right toe
 

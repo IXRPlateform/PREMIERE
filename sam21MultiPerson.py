@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """
 This script processes a video by performing video segmentation on detected human poses.
 It loads pose data from a pickle file, filters object tracks based on a minimum length and dispersion,

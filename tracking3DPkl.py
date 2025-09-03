@@ -6,108 +6,114 @@ import warnings
 
 import numpy as np
 
+# Treat warnings as errors
 warnings.filterwarnings('error')
 
 def calculate_average_euclidean_distance2(dataPKL, i, j, k, nbKeyPoints):
-    # Extraire les keypoints pour les frames i et i+1
+    # Extract keypoints for frames i and i+1
     keypoints_frame_i = dataPKL['allFrameHumans'][i][k]['j3d_smplx'][0:nbKeyPoints]
     keypoints_frame_i_plus_1 = dataPKL['allFrameHumans'][i+1][j]['j3d_smplx'][0:nbKeyPoints]
-    # Calculer la distance euclidienne pour chaque keypoint
+    # Compute Euclidean distance for each keypoint
     distances = np.linalg.norm(keypoints_frame_i - keypoints_frame_i_plus_1)
-    # Calculer la distance euclidienne moyenne
+    # Compute average Euclidean distance
     average_distance = np.mean(distances)
     
     return average_distance
 
 def calculate_average_euclidean_distance(dataPKL, i, j, k, nbKeyPoints):
-    # Extraire les keypoints pour les frames i et i+1
+    # Extract pelvis translation for frames i and i+1
     keypoints_frame_i = dataPKL['allFrameHumans'][i][k]['transl_pelvis']
     keypoints_frame_i_plus_1 = dataPKL['allFrameHumans'][i+1][j]['transl_pelvis']
     
-    # Calculer la distance euclidienne pour chaque keypoint
+    # Compute Euclidean distance between pelvis translations
     distance = np.linalg.norm(keypoints_frame_i - keypoints_frame_i_plus_1)
-    # Calculer la distance euclidienne moyenne
+    # Return the computed distance
     #print("distance: ",distance)
     return distance
 
-if len(sys.argv) != 4:
-    print("Usage: python cleanFramesPkl.py <input_pkl> <output_pkl> <distance_threshold>")
-    sys.exit(1)
+def main():
+    # Check command line arguments
+    if len(sys.argv) != 4:
+        print("Usage: python cleanFramesPkl.py <input_pkl> <output_pkl> <distance_threshold>")
+        sys.exit(1)
 
-# Open the pkl file
-print ("read pkl: ",sys.argv[1])
-file = open(sys.argv[1], 'rb')
-dataPKL = pickle.load(file) 
-file.close()
+    # Load the input pickle file
+    print ("read pkl: ",sys.argv[1])
+    file = open(sys.argv[1], 'rb')
+    dataPKL = pickle.load(file) 
+    file.close()
 
-threshold = float(sys.argv[3])
-nbKeyPoints = 10
+    threshold = float(sys.argv[3])
+    nbKeyPoints = 10
 
-maxHumans = 0
-for i in range(len(dataPKL['allFrameHumans'])):
-    maxHumans = max(maxHumans, len(dataPKL['allFrameHumans'][i]))
-print('maxHumans: ', maxHumans)
+    # Find the maximum number of humans detected in any frame
+    maxHumans = 0
+    for i in range(len(dataPKL['allFrameHumans'])):
+        maxHumans = max(maxHumans, len(dataPKL['allFrameHumans'][i]))
+    print('maxHumans: ', maxHumans)
 
-nextId = 0
-notempty = 0
-while len(dataPKL['allFrameHumans'][notempty])==0:
-    notempty += 1
-print("notempty: ",notempty)
+    nextId = 0
+    notempty = 0
+    # Find the first non-empty frame
+    while len(dataPKL['allFrameHumans'][notempty])==0:
+        notempty += 1
+    print("notempty: ",notempty)
 
-# Assign an ID to each person in the first frame
-for i in range(len(dataPKL['allFrameHumans'][notempty])):
-    dataPKL['allFrameHumans'][notempty][i]['id'] = nextId
-    nextId += 1
+    # Assign an ID to each person in the first non-empty frame
+    for i in range(len(dataPKL['allFrameHumans'][notempty])):
+        dataPKL['allFrameHumans'][notempty][i]['id'] = nextId
+        nextId += 1
 
-print ('start processing')
-for i in range(notempty,len(dataPKL['allFrameHumans'])-1):
-    size = len(dataPKL['allFrameHumans'][i])
-    sizeplusone = len(dataPKL['allFrameHumans'][i+1])
-    if (size!=0 and sizeplusone!=0):   
-        distances = np.empty([sizeplusone, size],dtype=float)
-        for j in range(sizeplusone):
-            for k in range(size):
-                distances[j,k] = calculate_average_euclidean_distance(dataPKL, i, j, k, nbKeyPoints)
-        for j in range(sizeplusone):
-            minIndex = np.argmin(distances)  # Index du minimum
-            row = minIndex//size
-            col = minIndex%size
-            minDistance = distances[row,col]
-            if(minDistance<threshold):
-                dataPKL['allFrameHumans'][i+1][row]['id'] = dataPKL['allFrameHumans'][i][col]['id']
-                for k in range(sizeplusone):
-                    distances[k,col] = np.inf 
-        for j in range(sizeplusone):
-            if (dataPKL['allFrameHumans'][i+1][j]['id']==-1):
-                dataPKL['allFrameHumans'][i+1][j]['id'] = nextId
-                nextId += 1                
-    else:
-        for j in range(sizeplusone):
-            if(dataPKL['allFrameHumans'][i+1][j]['id']==-1):
-                dataPKL['allFrameHumans'][i+1][j]['id'] = nextId
-                nextId += 1
+    print ('start processing')
+    # Iterate through frames and assign IDs to detected humans
+    for i in range(notempty,len(dataPKL['allFrameHumans'])-1):
+        size = len(dataPKL['allFrameHumans'][i])
+        sizeplusone = len(dataPKL['allFrameHumans'][i+1])
+        if (size!=0 and sizeplusone!=0):   
+            # Create a distance matrix between humans in consecutive frames
+            distances = np.empty([sizeplusone, size],dtype=float)
+            for j in range(sizeplusone):
+                for k in range(size):
+                    distances[j,k] = calculate_average_euclidean_distance(dataPKL, i, j, k, nbKeyPoints)
+            # Assign IDs based on minimum distance if below threshold
+            for j in range(sizeplusone):
+                minIndex = np.argmin(distances)  # Index of minimum distance
+                row = minIndex//size
+                col = minIndex%size
+                minDistance = distances[row,col]
+                if(minDistance<threshold):
+                    dataPKL['allFrameHumans'][i+1][row]['id'] = dataPKL['allFrameHumans'][i][col]['id']
+                    # Prevent assigning the same ID to multiple humans
+                    for k in range(sizeplusone):
+                        distances[k,col] = np.inf 
+            # Assign new IDs to humans not matched by distance
+            for j in range(sizeplusone):
+                if (dataPKL['allFrameHumans'][i+1][j]['id']==-1):
+                    dataPKL['allFrameHumans'][i+1][j]['id'] = nextId
+                    nextId += 1                
+        else:
+            # If current or next frame is empty, assign new IDs
+            for j in range(sizeplusone):
+                if(dataPKL['allFrameHumans'][i+1][j]['id']==-1):
+                    dataPKL['allFrameHumans'][i+1][j]['id'] = nextId
+                    nextId += 1
 
-# test results
-allTracks = []
-for i in range(nextId):
-    allTracks.append([])
-for i in range(len(dataPKL['allFrameHumans'])):
-    for j in range(len(dataPKL['allFrameHumans'][i])):
-        element = (i,j,np.squeeze(dataPKL['allFrameHumans'][i][j]['transl_pelvis'], axis=0).tolist())
-        allTracks[dataPKL['allFrameHumans'][i][j]['id']].append(element)
+    # Collect tracking results for each ID
+    allTracks = []
+    for i in range(nextId):
+        allTracks.append([])
+    for i in range(len(dataPKL['allFrameHumans'])):
+        for j in range(len(dataPKL['allFrameHumans'][i])):
+            element = (i,j,np.squeeze(dataPKL['allFrameHumans'][i][j]['transl_pelvis'], axis=0).tolist())
+            allTracks[dataPKL['allFrameHumans'][i][j]['id']].append(element)
 
-print ('done')
-print ("Last Id: ", nextId)
-#print(allCountPointsInBoxTracking)
+    print ('done')
+    print ("Last Id: ", nextId)
 
-with open(sys.argv[2], 'wb') as handle:
-    pickle.dump(dataPKL, handle, protocol=pickle.HIGHEST_PROTOCOL) 
+    # Save the updated pickle file
+    with open(sys.argv[2], 'wb') as handle:
+        pickle.dump(dataPKL, handle, protocol=pickle.HIGHEST_PROTOCOL) 
 
-"""
-# Loop through the video frames
-while cap.isOpened():
-    # Read a frame from the video
-    success, frame = cap.read()
-""" 
 
-# python .\processFramesPkl.py .\pkl\D0-talawa_technique_intro-Scene-015_896L_Clean.pkl .\pkl\D0-talawa_technique_intro-Scene-015_896L_Clean_Track.pkl 0.4
+if __name__ == "__main__":
+    main()

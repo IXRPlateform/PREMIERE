@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """
 This script processes an input video to estimate camera poses using a VGGT model.
 It performs the following steps:
@@ -108,35 +107,6 @@ def compute_fov(intrinsic_matrix, width, height):
     fov_diagonal = 2 * np.arctan((diagonal / 2) / focal_avg)
 
     return fov_horizontal, fov_vertical, fov_diagonal
-
-
-
-# def add_frame(imgs, frame):
-#     """
-#     Preprocess a video frame:
-#       - Convert BGR (OpenCV) to RGB.
-#       - Convert to a PIL image.
-#       - Resize the image to have a fixed width of 518 while keeping the aspect ratio.
-#       - Adjust the height to be divisible by 14 and crop vertically if needed.
-#     The processed image is appended to the list 'imgs'.
-#     """
-#     # Convert BGR to RGB and then to a PIL Image
-#     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-#     img = Image.fromarray(frame_rgb)
-
-#     width, height = img.size
-#     new_width = 518
-#     # Maintain aspect ratio; ensure new height is divisible by 14
-#     new_height = round(height * (new_width / width) / 14) * 14
-#     img = img.resize((new_width, new_height), Image.Resampling.BICUBIC)
-
-#     # Crop vertically if the new height is greater than 518
-#     if new_height > 518:
-#         start_y = (new_height - 518) // 2
-#         img = img.crop((0, start_y, new_width, start_y + 518))
-
-#     imgs.append(img)
-
 
 def add_frame(imgs, frame):
     """
@@ -924,7 +894,6 @@ def main():
 
     # Release video resource
     cv2.VideoCapture(video_in_name).release()
-
 
 if __name__ == "__main__":
     main()

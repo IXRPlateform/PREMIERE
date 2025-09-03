@@ -1,3 +1,18 @@
+"""
+premiereProcessing.py 3D pose estimation and tracking pipeline.
+
+This script processes a video to extract 3D human poses, track people over time,
+and refine the results. It performs:
+- Camera parameter estimation (using VGGT)
+- Floor plane detection (using MoGe)
+- 3D pose estimation (using NLF)
+- Tracking and segmentation
+- Temporal filtering and outlier removal
+- Optional hand pose estimation
+- Camera motion compensation
+"""
+
+# Standard library imports
 import os
 import sys
 import json

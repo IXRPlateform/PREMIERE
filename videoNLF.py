@@ -208,7 +208,7 @@ def process_human_detection(pred, frame_idx, human_idx, current_fov, modelSMPLX,
     return human
 
 
-if __name__ == "__main__":
+def main():
     # Argument parser for command line usage
     parser = ArgumentParser()
     parser.add_argument("--video", type=str, default='')
@@ -373,5 +373,5 @@ if __name__ == "__main__":
 
     print('Done')
 
-# Example usage:
-# python ./videoNLF.py --video ../videos/D0-talawa_technique_intro-Scene-003.mp4 --out_pkl ./pklnlf/D0-003.pkl --fov 60
+if __name__ == "__main__":
+    main()
