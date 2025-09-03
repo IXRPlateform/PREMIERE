@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Pkl Visualization</title>
+    <style>
+      body { margin: 0; }
+      canvas { display: block; }
+    </style>
+  </head>
+  <body>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='gui.css') }}">
+
+    <!-- Use es-module-shims with CDN for module loading -->
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.3.6/dist/es-module-shims.js"></script>
+    <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.175.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.175.0/examples/jsm/"
+      }
+    }
+    </script>
+    
+    <!-- Load external functions -->
+    <script type="module" src="{{ url_for('static', filename='functions.js') }}"></script>
+    
+    <script type="module">
+      import * as THREE from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { GUI } from "three/addons/libs/lil-gui.module.min.js";
+      import {
+        connections,
+        connectionsColors,
+        checkerboardGroup,
+        checkerboardMaterial1,
+        checkerboardMaterial2,
+        idColors,
+        addCheckerboard, 
+        addAllTracks, 
+        initTHREE, 
+        generateTrackList,
+        initSkeletons, 
+        updateSkeletons,
+        updateSkeletonsPKL, 
+        initBodies, 
+        updateBodies, 
+        updateBodiesPKL,  
+        fetchFramePKL, 
+        fetchVerticesPKL, 
+        fetchInfosPKL 
+      } from "{{ url_for('static', filename='functions.js') }}";
+
+      /*==================================================
+      =            Global Variables & State            =
+      ==================================================*/
+      let scene, camera, renderer, controls, clock;
+      let gui, currentFrameGUI, controlTracksGUI;
+      let cameraGroup, cameraSubGroup;
+      let allBodiesGroup, allSkeletonsGroup, allTracksGroup;
+      let bodiesArrayWithId = [], bodiesArrayWithoutId = [];
+      let skeletonsArrayWithId = [], skeletonsArrayWithoutId = [];
+
+      let totalFrameNumber = 0, maxHumans = 0, notempty = 0;
+      let keypointsNumber = 127, FPS = 30, frameDuration = 1 / FPS;
+      let fileName = "No file loaded";
+      let smplx_faces = [];
+      let isAnimating = false, counter = 0;
+      let isRecording = false, mediaRecorder = null, recordedChunks = [];
+
+      let cameraFovs, cameraRotations, cameraPositions;
+      let cameraParams = { targetX: 0, targetY: 0, targetZ: 0, distance: 0, polarAngle: 0, azimuthAngle: 0 };
+
+      const params = {
+        currentFrame: 0,
+        currentFrameFloat: 0,
+        cameraRotationX: 0,
+        cameraRotationY: 0,
+        globalZOffset: 0.0,
+        speedMultiplier: 1,
+        displaySkeletons: true,
+        displayTracks: true,
+        displayCheckerboard: true,
+        displayCamera: true,
+        backgroundColor: 0x606060,
+        checkerboardColor1: 0x808080,
+        checkerboardColor2: 0x404040,
+      };
+
+      /*===============================================
+      =            Utility & Helper Functions         =
+      ===============================================*/
+      // Update the scene for the given frame number.
+      async function updateFrame(frame) {
+        params.currentFrame = frame;
+        params.currentFrameFloat = frame;
+        clock.elapsedTime = frame * frameDuration;
+        currentFrameGUI.updateDisplay();
+        const data = await fetchFramePKL(frame);
+        updateSkeletonsPKL(data, maxHumans, skeletonsArrayWithId, skeletonsArrayWithoutId, keypointsNumber);
+        updateCameraHelper(frame);
+      }
+
+      function nextFrame() {
+        if (params.currentFrame < totalFrameNumber - 1) {
+          updateFrame(params.currentFrame + 1);
+        }
+      }
+
+      function previousFrame() {
+        if (params.currentFrame > 0) {
+          updateFrame(params.currentFrame - 1);
+        }
+      }
+
+      function playPauseAnimation() {
+        if (!isAnimating) {
+          clock.elapsedTime = params.currentFrame * frameDuration;
+        }
+        isAnimating = !isAnimating;
+      }
+
+      function addTrackToggles() {
+        allTracksGroup.children.forEach((track, index) => {
+          const poseId = track.userData.poseId;
+          const key = (poseId !== undefined) ? poseId : index;
+          const trackObj = { visible: window.trackVisibility[key] ?? track.visible };
+          const controller = controlTracksGUI.add(trackObj, "visible")
+            .name("Track " + key)
+            .onChange((value) => {
+              track.visible = value;
+              window.trackVisibility[key] = value;
+              fetchFramePKL(params.currentFrame).then((data) => {
+                updateSkeletonsPKL(data, maxHumans, skeletonsArrayWithId, skeletonsArrayWithoutId, keypointsNumber);
+                updateCameraHelper(params.currentFrame);
+              });
+            });
+          if (controller?.domElement) {
+            const colorHex = '#' + idColors[(key+1) % idColors.length].toString(16).padStart(6, '0');
+            controller.domElement.style.color = colorHex;
+          }
+        });
+      }
+
+      /*===============================
+      =            Camera             =
+      ===============================*/
+      function setOrbitAngles(polar, azimuth) {
+        const center = controls.target;
+        const distance = controls.object.position.distanceTo(center);
+        const newPos = new THREE.Vector3().setFromSphericalCoords(distance, polar, azimuth);
+        controls.object.position.copy(center).add(newPos);
+      }
+
+      function initCameraHelper(cameraPositions, cameraRotations, cameraFovs) {
+        cameraGroup = new THREE.Group();
+        cameraSubGroup = new THREE.Group();
+        cameraGroup.add(cameraSubGroup);
+
+        // Camera body
+        const cameraBody = new THREE.Mesh(
+          new THREE.BoxGeometry(0.125, 0.1, 0.1),
+          new THREE.MeshLambertMaterial({ color: 0xdddddd })
+        );
+
+        // Camera lens
+        const lens = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.04, 0.04, 0.06, 20),
+          new THREE.MeshLambertMaterial({ color: 0x884444 })
+        );
+        lens.rotation.x = Math.PI / 2;
+        lens.position.z = -0.08;
+
+        // Field of view wireframe
+        const fovAngle = Math.PI / 6;
+        const fovLength = 0.3;
+        const sx = fovLength * Math.sin(fovAngle);
+        const sy = fovLength * Math.sin(fovAngle);
+        const sz = -fovLength * Math.cos(fovAngle);
+
+        const vertices = new Float32Array([
+          // Apex to Base corners
+          0, 0, 0,   sx,  sy, sz,  // Origin to Top-Right
+          0, 0, 0,   sx, -sy, sz,  // Origin to Bottom-Right
+          0, 0, 0,  -sx,  sy, sz,  // Origin to Top-Left
+          0, 0, 0,  -sx, -sy, sz,  // Origin to Bottom-Left
+
+          // Base rectangle edges
+           sx,  sy, sz,   sx, -sy, sz,  // Top-Right to Bottom-Right (Right edge)
+           sx, -sy, sz,  -sx, -sy, sz,  // Bottom-Right to Bottom-Left (Bottom edge)
+          -sx, -sy, sz,  -sx,  sy, sz,  // Bottom-Left to Top-Left (Left edge)
+          -sx,  sy, sz,   sx,  sy, sz   // Top-Left to Top-Right (Top edge)
+        ]);
+        const fovGeometry = new THREE.BufferGeometry();
+        fovGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+        const fovLines = new THREE.LineSegments(
+          fovGeometry,
+          new THREE.LineBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.5 })
+        );
+
+        cameraSubGroup.add(cameraBody, lens, fovLines);
+        scene.add(cameraGroup);
+        updateCameraHelper(params.currentFrame);
+      }
+
+      function updateCameraHelper(frameIndex) {
+        if (!cameraSubGroup) return;
+        const position = (cameraPositions && cameraPositions[frameIndex]) || [0, 0, 0];
+        const rotation = (cameraRotations && cameraRotations[frameIndex]) || [0, 0, 0];
+        cameraSubGroup.position.set(...position);
+        cameraSubGroup.rotation.order = 'ZYX';
+        cameraSubGroup.rotation.set(rotation[0], -rotation[1], -rotation[2]);
+      }
+
+      function loadCameraSettings() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = (event) => {
+          const file = event.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const data = JSON.parse(e.target.result);
+              cameraParams = { 
+                targetX: data.targetX ?? cameraParams.targetX,
+                targetY: data.targetY ?? cameraParams.targetY,
+                targetZ: data.targetZ ?? cameraParams.targetZ,
+                distance: data.distance ?? cameraParams.distance,
+                polarAngle: data.polarAngle ?? cameraParams.polarAngle,
+                azimuthAngle: data.azimuthAngle ?? cameraParams.azimuthAngle,
+              };
+              controls.target.set(cameraParams.targetX, cameraParams.targetY, cameraParams.targetZ);
+              setOrbitAngles(
+                THREE.MathUtils.degToRad(cameraParams.polarAngle),
+                THREE.MathUtils.degToRad(cameraParams.azimuthAngle)
+              );
+              controls.update();
+              console.log("Camera settings loaded successfully.");
+            } catch (error) {
+              console.error("Error loading camera settings:", error);
+            }
+          };
+          reader.readAsText(file);
+        };
+        input.click();
+      }
+
+      function saveCameraSettings() {
+        const dataToSave = { ...cameraParams };
+        const jsonString = JSON.stringify(dataToSave, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'camera_settings.json';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        console.log("Camera settings saved successfully.");
+      }
+
+      /*===================================
+      =            Video Recording        =
+      ===================================*/
+      function recordFullVideo(frameObj) {
+        if (isRecording) {
+          console.log("Stopping recording...");
+          isRecording = false;
+          if (mediaRecorder && mediaRecorder.state === "recording") mediaRecorder.stop();
+          if (frameObj._videoController) frameObj._videoController.name("Generate Full Video");
+          return;
+        }
+        frameObj._videoInitialFrame = params.currentFrame;
+        if (frameObj._videoController) frameObj._videoController.name("Stop Video Generation");
+        console.log("Starting video recording...");
+        isRecording = true;
+        const progressIndicator = document.createElement('div');
+        Object.assign(progressIndicator.style, {
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          padding: '20px',
+          backgroundColor: 'rgba(0, 0, 0, 0.7)',
+          color: '#fff',
+          borderRadius: '10px',
+          zIndex: '10000',
+          fontWeight: 'bold'
+        });
+        document.body.appendChild(progressIndicator);
+        let currentFrameIndex = params.currentFrame;
+        const frameImages = [];
+        async function processFrames() {
+          for (let frameIndex = currentFrameIndex; frameIndex < totalFrameNumber; frameIndex++) {
+            if (!isRecording) break;
+            progressIndicator.textContent = `Rendering: ${Math.round((frameIndex / (totalFrameNumber - 1)) * 100)}% (Frame ${frameIndex}/${totalFrameNumber - 1})`;
+            params.currentFrame = frameIndex;
+            params.currentFrameFloat = frameIndex;
+            try {
+              const fetchFunc = (allBodiesGroup && allBodiesGroup.visible) ? fetchVerticesPKL : fetchFramePKL;
+              const data = await fetchFunc(frameIndex);
+              updateSkeletonsPKL(data, maxHumans, skeletonsArrayWithId, skeletonsArrayWithoutId, keypointsNumber);
+              if (allBodiesGroup && allBodiesGroup.visible) {
+                updateBodiesPKL(data, maxHumans, bodiesArrayWithId, bodiesArrayWithoutId);
+              }
+              updateCameraHelper(frameIndex);
+              await new Promise(resolve => {
+                renderer.render(scene, camera);
+                requestAnimationFrame(() => {
+                  const offscreenCanvas = document.createElement('canvas');
+                  offscreenCanvas.width = renderer.domElement.width;
+                  offscreenCanvas.height = renderer.domElement.height;
+                  offscreenCanvas.getContext('2d').drawImage(renderer.domElement, 0, 0);
+                  frameImages.push(offscreenCanvas);
+                  setTimeout(resolve, 5);
+                });
+              });
+              if (frameImages.length % 50 === 0) await new Promise(resolve => setTimeout(resolve, 20));
+            } catch (error) {
+              console.error(`Error processing frame ${frameIndex}:`, error);
+            }
+          }
+          console.log(`Captured ${frameImages.length} frames`);
+          if (isRecording && frameImages.length > 0) {
+            progressIndicator.textContent = `Creating video with ${frameImages.length} frames...`;
+            const canvas = document.createElement('canvas');
+            canvas.width = renderer.domElement.width;
+            canvas.height = renderer.domElement.height;
+            const ctx = canvas.getContext('2d', { alpha: false, desynchronized: false });
+            
+            // Fix 1: Set proper frame rate for the stream
+            const stream = canvas.captureStream(FPS);
+            
+            // Fix 2: Improved MediaRecorder options with duration metadata
+            let mediaOptions = { 
+              videoBitsPerSecoder: 15000000, 
+              mimeType: 'video/webm;codecs=vp9'
+            };
+            
+            // Fix 3: Better codec detection
+            if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+              mediaOptions.mimeType = 'video/webm;codecs=vp9';
+            } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
+              mediaOptions.mimeType = 'video/webm;codecs=vp8';
+            } else if (MediaRecorder.isTypeSupported('video/webm')) {
+              mediaOptions.mimeType = 'video/webm';
+            } else {
+              console.warn('WebM not supported, falling back to default');
+              mediaOptions.mimeType = '';
+            }
+            
+            mediaRecorder = new MediaRecorder(stream, mediaOptions);
+            recordedChunks = [];
+            
+            mediaRecorder.ondataavailable = (e) => {
+              if (e.data.size > 0) recordedChunks.push(e.data);
+            };
+            
+            mediaRecorder.onstop = () => {
+              if (!recordedChunks.length) {
+                console.error("No video data was recorded");
+                document.body.removeChild(progressIndicator);
+                return;
+              }
+              const blob = new Blob(recordedChunks, { type: mediaOptions.mimeType || 'video/webm' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+              const filename = `pose3d-video-${timestamp}.webm`;
+              a.download = filename;
+              a.click();
+              URL.revokeObjectURL(url);
+              isRecording = false;
+              updateFrame(frameObj._videoInitialFrame);
+              if (frameObj._videoController) frameObj._videoController.name("Generate Full Video");
+              document.body.removeChild(progressIndicator);
+              console.log(`Video saved as ${filename}`);
+            };
+            
+            // Fix 4: Start recording with proper timeslice
+            const timesliceMs = Math.round(1000 / FPS);
+            mediaRecorder.start(timesliceMs);
+            
+            let frameIndex = 0;
+            const frameDurationMs = 1000 / FPS;
+            
+            // Fix 5: More precise timing control
+            function renderFrame() {
+              if (!isRecording || frameIndex >= frameImages.length) {
+                if (isRecording && mediaRecorder.state === "recording") {
+                  // Fix 6: Ensure proper finalization
+                  setTimeout(() => mediaRecorder.stop(), 100);
+                }
+                return;
+              }
+              
+              progressIndicator.textContent = `Encoding: ${Math.round((frameIndex / (frameImages.length - 1)) * 100)}% (Frame ${frameIndex}/${frameImages.length - 1})`;
+              
+              // Clear and draw frame
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              ctx.drawImage(frameImages[frameIndex], 0, 0);
+              
+              frameIndex++;
+              
+              // Fix 7: Consistent frame timing
+              setTimeout(renderFrame, frameDurationMs);
+            }
+            
+            // Start rendering frames
+            renderFrame();
+          } else {
+            isRecording = false;
+            if (frameObj._videoController) frameObj._videoController.name("Generate Full Video");
+            document.body.removeChild(progressIndicator);
+          }
+        }
+        processFrames();
+      }
+
+      /*===================================
+      =            GUI Initialization     =
+      ===================================*/
+      function initGUI(data, frameObj) {
+        gui = new GUI({ title: "Main Controls" });
+        // Frame controls
+        const frameGUI = gui.addFolder("Frame");
+        currentFrameGUI = frameGUI.add(params, "currentFrame", 0, totalFrameNumber - 1, 1)
+          .name("Frame")
+          .listen()
+          .onChange((value) => updateFrame(value));
+        frameGUI.add({ playPause: playPauseAnimation }, "playPause").name("Play/Pause");
+        frameGUI.add({ stop: () => {
+          isAnimating = false;
+          clock.elapsedTime = 0;
+          updateFrame(0);
+        } }, "stop").name("Stop");
+        frameGUI.add({ next: nextFrame }, "next").name("Next Frame");
+        frameGUI.add({ previous: previousFrame }, "previous").name("Previous Frame");
+        frameGUI.add(params, "speedMultiplier", { "1/4": 0.25, "1/2": 0.5, "x1": 1, "x2": 2, "x4": 4 })
+          .name("Speed Multiplier")
+          .listen()
+          .onChange((value) => {
+            params.speedMultiplier = value;
+            console.log(params.speedMultiplier);
+          });
+
+        // Mesh controls
+        const meshesGUI = gui.addFolder("Meshes");
+        meshesGUI.add(frameObj, "computeMeshes").name("Compute Meshes");
+        meshesGUI.add(frameObj, "removeMeshes").name("Remove Meshes");
+
+        // Global transform (camera rotation/offset)
+        const transformGUI = gui.addFolder("Initial Camera Transform");
+        transformGUI.add(params, "cameraRotationX", -180, 180, 0.1)
+          .name("Camera Rotation X")
+          .listen()
+          .onChange((value) => {
+            params.cameraRotationX = value;
+            if (allBodiesGroup) allBodiesGroup.rotation.x = Math.PI - (value * Math.PI / 180);
+            if (allSkeletonsGroup) allSkeletonsGroup.rotation.x = Math.PI - (value * Math.PI / 180);
+            if (allTracksGroup) allTracksGroup.rotation.x = Math.PI - (value * Math.PI / 180);
+            if (cameraGroup) cameraGroup.rotation.x = - (value * Math.PI / 180);
+          });
+        transformGUI.add(params, "cameraRotationY", -180, 180, 0.1)
+          .name("Camera Rotation Y")
+          .listen()
+          .onChange((value) => {
+            params.cameraRotationY = value;
+            if (allBodiesGroup) allBodiesGroup.rotation.z = (value * Math.PI / 180);
+            if (allSkeletonsGroup) allSkeletonsGroup.rotation.z = (value * Math.PI / 180);
+            if (allTracksGroup) allTracksGroup.rotation.z = (value * Math.PI / 180);
+            if (cameraGroup) cameraGroup.rotation.z = Math.PI - (value * Math.PI / 180);
+          });
+        transformGUI.add(params, "globalZOffset", -5, 5, 0.01)
+          .name("Floor Z Offset")
+          .listen()
+          .onChange((value) => {
+            params.globalZOffset = value;
+            if (checkerboardGroup) checkerboardGroup.position.y = value;
+          });
+
+        // Display options
+        const displayGUI = gui.addFolder("Display");
+        displayGUI.add(params, "displayCamera")
+          .name("Display Camera")
+          .listen()
+          .onChange(() => { cameraGroup.visible = params.displayCamera; });
+        displayGUI.add(params, "displaySkeletons")
+          .name("Display Skeletons")
+          .listen()
+          .onChange(() => { allSkeletonsGroup.visible = params.displaySkeletons; });
+        displayGUI.add(params, "displayTracks")
+          .name("Display Tracks")
+          .listen()
+          .onChange(() => { allTracksGroup.visible = params.displayTracks; });
+        displayGUI.add(params, "displayCheckerboard")
+          .name("Display Checkerboard")
+          .listen()
+          .onChange(() => { checkerboardGroup.visible = params.displayCheckerboard; });
+
+        // Camera controls
+        const cameraGUI = gui.addFolder("3D Environment Camera Properties");
+        controls.minAzimuthAngle = -Math.PI;
+        controls.maxAzimuthAngle = Math.PI;
+        controls.minPolarAngle = -Math.PI;
+        controls.maxPolarAngle = Math.PI;
+        cameraGUI.add(cameraParams, "targetX", -10, 10, 0.01)
+          .name("Target X")
+          .listen()
+          .onChange((val) => { controls.target.x = val; controls.update(); });
+        cameraGUI.add(cameraParams, "targetY", -10, 10, 0.01)
+          .name("Target Y")
+          .listen()
+          .onChange((val) => { controls.target.y = val; controls.update(); });
+        cameraGUI.add(cameraParams, "targetZ", -10, 10, 0.01)
+          .name("Target Z")
+          .listen()
+          .onChange((val) => { controls.target.z = val; controls.update(); });
+        cameraGUI.add(cameraParams, "distance", 0.1, 50, 0.01)
+          .name("Distance")
+          .listen()
+          .onChange((val) => {
+            const center = controls.target.clone();
+            const direction = controls.object.position.clone().sub(center).normalize();
+            controls.object.position.copy(center.addScaledVector(direction, val));
+            controls.update();
+          });
+        cameraGUI.add(cameraParams, "polarAngle", 0, 180, 0.1)
+          .name("Polar (°)")
+          .listen()
+          .onChange((val) => {
+            setOrbitAngles(THREE.MathUtils.degToRad(val), THREE.MathUtils.degToRad(cameraParams.azimuthAngle));
+            controls.update();
+          });
+        cameraGUI.add(cameraParams, "azimuthAngle", -180, 180, 0.1)
+          .name("Azimuth (°)")
+          .listen()
+          .onChange((val) => {
+            setOrbitAngles(THREE.MathUtils.degToRad(cameraParams.polarAngle), THREE.MathUtils.degToRad(val));
+            controls.update();
+          });
+        cameraGUI.add({ load: loadCameraSettings }, "load").name("Load Camera JSON File");
+        cameraGUI.add({ save: saveCameraSettings }, "save").name("Save Camera JSON File");
+        cameraGUI.open();
+
+        // Screenshot and video recording controls
+        const screenshotGUI = gui.addFolder("Screenshot");
+        screenshotGUI.add(frameObj, "takeScreenshot").name("Take Screenshot");
+        screenshotGUI.add(frameObj, "resetCounter").name("Reset Screenshot Counter");
+        const videoControl = screenshotGUI.add(frameObj, "saveFullVideo").name("Generate Full Video");
+        frameObj._videoController = videoControl;
+        screenshotGUI.addColor(params, "backgroundColor")
+          .name("Background Color")
+          .onChange((value) => { renderer.setClearColor(value); });
+        screenshotGUI.addColor(params, "checkerboardColor1")
+          .name("Checkerboard Light")
+          .onChange((value) => { checkerboardMaterial1.color.setHex(value); });
+        screenshotGUI.addColor(params, "checkerboardColor2")
+          .name("Checkerboard Dark")
+          .onChange((value) => { checkerboardMaterial2.color.setHex(value); });
+      }
+
+      /*=======================================
+      =            Initialization           =
+      =======================================*/
+      async function init() {
+        clock = new THREE.Clock();
+        clock.start();
+
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 500);
+        renderer = new THREE.WebGLRenderer({ samples: 4, antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+        controls = new OrbitControls(camera, renderer.domElement);
+        initTHREE(renderer, scene, camera, controls);
+
+        const data = await fetchInfosPKL();
+        totalFrameNumber = data["totalFrameNumber"];
+        maxHumans = data["maxHumans"];
+        notempty = data["notempty"];
+        keypointsNumber = data["nbKeyPoints"];
+        smplx_faces = data["smplx_faces"];
+        FPS = data["video_fps"] || 30;
+        fileName = data["fileName"];
+        frameDuration = 1 / FPS;
+
+        cameraFovs = data["camera_fovs"];
+        cameraRotations = data["camera_rotations"];
+        cameraPositions = data["camera_positions"];
+        params.cameraRotationX = data["camera_rotation_deg"][0];
+        params.cameraRotationY = data["camera_rotation_deg"][1];
+        params.globalZOffset = data["floor_Zoffset"];
+
+        document.title = "Visualization: " + fileName;
+        initCameraHelper(cameraPositions, cameraRotations, cameraFovs);
+        cameraGroup.rotation.x = - (params.cameraRotationX * Math.PI / 180);
+        cameraGroup.rotation.y = - (params.cameraRotationY * Math.PI / 180);
+
+        // Frame control object (contains mesh, camera and video actions)
+        const frameObj = {
+          computeMeshes: () => {
+            fetchVerticesPKL(params.currentFrame).then((data) => {
+              allBodiesGroup.visible = true;
+              updateBodiesPKL(data, maxHumans, bodiesArrayWithId, bodiesArrayWithoutId);
+              updateSkeletonsPKL(data, maxHumans, skeletonsArrayWithId, skeletonsArrayWithoutId, keypointsNumber);
+            });
+          },
+          removeMeshes: () => { allBodiesGroup.visible = false; },
+          playPauseAnimation: playPauseAnimation,
+          stopAnimation: () => {
+            isAnimating = false;
+            clock.elapsedTime = 0;
+            updateFrame(0);
+          },
+          nextFrame: nextFrame,
+          previousFrame: previousFrame,
+          takeScreenshot: () => {
+            renderer.render(scene, camera);
+            const dataURL = renderer.domElement.toDataURL("image/png");
+            const a = document.createElement("a");
+            a.href = dataURL;
+            a.download = `pose3d-${String(counter).padStart(3, '0')}.png`;
+            a.click();
+            counter++;
+          },
+          resetCounter: () => { counter = 0; },
+          loadCamera: loadCameraSettings,
+          saveCamera: saveCameraSettings,
+          saveFullVideo: function() { recordFullVideo(frameObj); }
+        };
+
+        // Initialize tracks (if any)
+        allTracksGroup = new THREE.Group();
+        if (data["allTracks"] && data["allTracks"].length > 0) {
+          addAllTracks(data["allTracks"], 0, allTracksGroup, params, scene);
+          scene.add(allTracksGroup);
+          window.trackVisibility = {};
+          allTracksGroup.children.forEach((track, index) => {
+            const poseId = track.userData.poseId;
+            const key = (poseId !== undefined) ? poseId : index;
+            window.trackVisibility[key] = true;
+          });
+          controlTracksGUI = new GUI({ title: "Track Controls", autoPlace: false });
+          controlTracksGUI.domElement.style.position = "fixed";
+          controlTracksGUI.domElement.style.left = "-10px";
+          controlTracksGUI.domElement.style.top = "0px";
+          document.body.appendChild(controlTracksGUI.domElement);
+          addTrackToggles();
+        }
+
+        // Initialize skeletons, bodies and checkerboard
+        fetchFramePKL(notempty).then((data) => {
+          allSkeletonsGroup = new THREE.Group();
+          initSkeletons(maxHumans, allSkeletonsGroup, params, scene, skeletonsArrayWithId, skeletonsArrayWithoutId, keypointsNumber);
+          allBodiesGroup = new THREE.Group();
+          initBodies(maxHumans, allBodiesGroup, params, scene, bodiesArrayWithId, bodiesArrayWithoutId, smplx_faces);
+          const boardSize = 25, squareSize = 1;
+          addCheckerboard(scene, boardSize, squareSize);
+          if (checkerboardGroup) checkerboardGroup.position.y = params.globalZOffset;
+          renderer.setClearColor(params.backgroundColor);
+          if (checkerboardMaterial1) checkerboardMaterial1.color.setHex(params.checkerboardColor1);
+          if (checkerboardMaterial2) checkerboardMaterial2.color.setHex(params.checkerboardColor2);
+          updateFrame(params.currentFrame);
+        });
+
+        initGUI(data, frameObj);
+
+        // Event listeners
+        window.addEventListener("resize", onWindowResize, false);
+        window.addEventListener("keydown", onDocumentKeyDown, false);
+        controls.addEventListener("change", updateSliders);
+      }
+
+      function animate() {
+        requestAnimationFrame(animate);
+        if (controls) controls.update();
+        const deltaTime = clock.getDelta() * params.speedMultiplier;
+        if (isAnimating) {
+          params.currentFrameFloat += deltaTime * FPS;
+          if (params.currentFrameFloat >= totalFrameNumber) {
+            params.currentFrameFloat = 0;
+          }
+          params.currentFrame = Math.floor(params.currentFrameFloat);
+          currentFrameGUI.updateDisplay();
+          fetchFramePKL(params.currentFrame).then((data) => {
+            updateSkeletonsPKL(data, maxHumans, skeletonsArrayWithId, skeletonsArrayWithoutId, keypointsNumber);
+            updateCameraHelper(params.currentFrame);
+          });
+        }
+        renderer.render(scene, camera);
+      }
+
+      /*===========================
+      =            Events         =
+      ===========================*/
+      function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      function onDocumentKeyDown(event) {
+        switch (event.which) {
+          case 39: nextFrame(); break; // Right arrow
+          case 37: previousFrame(); break; // Left arrow
+          case 32: playPauseAnimation(); break; // Space key
+        }
+      }
+
+      // Update OrbitControls parameters based on current camera state
+      function updateSliders() {
+        const pos = controls.object.position.clone().sub(controls.target);
+        const spherical = new THREE.Spherical().setFromVector3(pos);
+
+        // Round values to 2 decimal places
+        cameraParams.polarAngle = Math.round(THREE.MathUtils.radToDeg(spherical.phi) * 100) / 100;
+        cameraParams.azimuthAngle = Math.round(THREE.MathUtils.radToDeg(spherical.theta) * 100) / 100;
+        cameraParams.targetX = Math.round(controls.target.x * 100) / 100;
+        cameraParams.targetY = Math.round(controls.target.y * 100) / 100;
+        cameraParams.targetZ = Math.round(controls.target.z * 100) / 100;
+        cameraParams.distance = Math.round(controls.getDistance() * 100) / 100;
+      }
+
+      // Window size indicator
+      const windowSizeIndicator = document.createElement('div');
+      Object.assign(windowSizeIndicator.style, {
+        position: 'fixed',
+        bottom: '10px',
+        left: '10px',
+        padding: '5px 10px',
+        backgroundColor: 'rgba(0.5, 0.5, 0.5, 0.25)',
+        color: '#fff',
+        fontSize: '14px',
+        borderRadius: '5px',
+        zIndex: '9999'
+      });
+      document.body.appendChild(windowSizeIndicator);
+      function updateWindowSizeIndicator() {
+        windowSizeIndicator.textContent = `${window.innerWidth} x ${window.innerHeight}`;
+      }
+      updateWindowSizeIndicator();
+      window.addEventListener('resize', updateWindowSizeIndicator);
+
+      window.addEventListener("load", () => {
+        console.log("The page has fully loaded");
+        init();
+        animate();
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>3D Capture</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+      }
+      canvas {
+        display: block;
+      }
+      .window-size {
+        position: fixed;
+        bottom: 5px;
+        left: 5px;
+        padding: 5px 10px;
+        background-color: rgba(0.5, 0.5, 0.5, 0.25);
+        color: #eee;
+        font-size: 14px;
+        border-radius: 5px;
+        z-index: 9999;
+      }
+    </style>
+    <link rel="stylesheet" type="text/css" href="static/gui.css">
+  </head>
+  <body>
+    <div id="windowSize" class="window-size"></div>
+
+    <script async src="https://unpkg.com/es-module-shims@1.3.6/dist/es-module-shims.js"></script>
+    
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.175.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.175.0/examples/jsm/"
+        }
+      }
+    </script>
+    
+    <script type="module" src="./static/functions.js"></script>
+
+    <script type="module">
+      //http://127.0.0.1:5502/templates-Visualization/viewer.html?base=./web&video=./web.mp4
+      //http://127.0.0.1:5502/templates-Visualization/viewer.html?dir=./D0-15
+      //http://127.0.0.1:5502/templates-Visualization/viewer.html?dir=./D0-21
+
+      import * as THREE from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { GUI } from "three/addons/libs/lil-gui.module.min.js";
+      import Stats from 'three/addons/libs/stats.module.js';
+      import { XRButton } from './static/XRButton.js';
+      import { VRButton } from './static/VRButton.js';
+      import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
+      import { LinearSRGBColorSpace, NoToneMapping } from 'three';
+
+      // Import functions needed from functions.js
+      import { connections, connectionsColors, idColors, addCheckerboard, addAllTracks,
+        initTHREE, updateCheckerboard, checkerboardGroup, checkerboardMaterial1, checkerboardMaterial2,
+        initSkeletons, updateSkeletons, updateSkeletonsPKL, 
+        initBodies, updateBodies, updateBodiesPKL, updateBodiesWithNormals, 
+        fetchRangeURL, fetchVerticesPKL, fetchInfosURL } from "./static/functions.js";
+
+      /*==================================================
+      =            Global Variables & State            =
+      ==================================================*/
+      let camera, renderer, controls, scene, clock;
+      let stats, gpuPanel;
+      let cameraGroup, cameraSubGroup;
+      let controller1, controller2;
+      let controllerGrip1, controllerGrip2;
+      let windowSizeIndicator = document.getElementById('windowSize');
+
+      let allBodiesGroup = null;
+      let bodiesArrayWithId = [];
+      let bodiesArrayWithoutId = [];
+
+      let allSkeletonsGroup = null;
+      let skeletonsArrayWithId = [];
+      let skeletonsArrayWithoutId = [];
+
+      let allTracksGroup = null;
+      let controlTracksGUI;
+
+      let gui;
+      let currentFrameGUI;
+      let totalFrameNumber = 0;
+      let maxHumans = 0;
+      let notempty = 0;
+      let FPS = 30;
+      let frameDuration = 1 / FPS;
+      let smplx_faces = [];
+      let framesId = []
+      let framesIdPositions = []
+      let min_xyz = [0, 0, 0];
+      let max_xyz = [0, 0, 0];
+      let keypoints_max = 0;
+      let isAnimating = false;
+      let counter = 0;
+
+      let cameraFovs, cameraRotations, cameraPositions;
+      let cameraParams = { targetX: 0, targetY: 0, targetZ: 0, distance: 5, polarAngle: 45, azimuthAngle: 0 };
+
+      // Extract base from URL
+      const urlParams = new URLSearchParams(window.location.search);
+      let dirName = urlParams.get('dir');
+      let baseName = urlParams.get('base') || 'test';
+      let videoName = urlParams.get('video');
+      let URLbin = baseName+'.bin';
+      let URLjson = baseName+'.json';
+
+      let video, videoTexture, plan;
+      let useVideo = false;
+      let URLVideo = '';
+      let stillFetching = false;
+      
+        if (dirName !== null) {
+          videoName = dirName+"/video.mp4";
+          URLbin = dirName+'/video.bin';
+          URLjson = dirName+'/video.json';
+        } 
+
+      const enableXR = (() => {
+        // Vérifier si le navigateur supporte WebXR
+        if ('xr' in navigator) {
+          return navigator.xr.isSessionSupported('immersive-vr')
+            .then(supported => supported)
+            .catch(() => false);
+        }
+        // Vérifier la présence de l'API WebVR comme fallback (pour les anciens navigateurs)
+        else if ('getVRDisplays' in navigator) {
+          return Promise.resolve(true);
+        }
+        // Aucune des API n'est supportée
+        return Promise.resolve(false);
+      })();
+ 
+      if(videoName !== null) {
+        useVideo = true;
+        URLVideo = videoName;  
+      }
+
+      let params = {
+        currentFrame: 0,
+        currentFrameFloat: 0,
+        savedPausedTime: 0,
+        cameraRotationX: 0,
+        cameraRotationY: 0,
+        globalRotation: 0,
+        globalZOffset: 0.5,
+        speedMultiplier: 1,
+        displayTracks: false,
+        displayTracksKF: true,
+        displayMeshes: true,
+        displaySkeletons: true,
+        meshesOpacity: .75,
+        displayVideo: false,
+        displayCheckerboard: true,
+        displayCamera: true,
+        backgroundColor: 0x606060,
+        checkerboardColor1: 0x808080,
+        checkerboardColor2: 0x404040,
+      };
+
+      /*===============================================
+      =            Utility & Helper Functions        =
+      ===============================================*/
+      
+      function ToVertices(positions) {
+        const vertices = [];
+        for (let index = 0; index < positions.length/3; index++) 
+          vertices.push([positions[index*3], positions[index*3+1], positions[index*3+2]]);
+        return vertices;
+      }
+
+      async function fetchFrameURL(frame, updateMesh) {
+        try {
+          const position = framesIdPositions[frame];
+          const size = framesId[frame].length;
+          const blockSize = (127+10475*2)*3;
+          const blockSizeJ3D = (127*3);
+          const blockSizeMesh = (10475*2)*3;
+
+          stillFetching = true;
+          
+          if (updateMesh) {
+            const res = await fetchRangeURL(URLbin, position*blockSize*4, (position+size)*blockSize*4-1);
+            const data = new Float32Array(res);
+            const allKeypoints = []
+            const allVertices = []
+            const allNormals = []
+            
+            for (let i=0; i < size; i++) {
+              const keypoints = ToVertices(data.subarray(i*blockSizeJ3D, (i+1)*blockSizeJ3D));
+              allKeypoints.push(keypoints);
+            }
+            
+            for (let i=0; i < framesId[frame].length; i++) {
+              const vertices = data.subarray(size*blockSizeJ3D+i*blockSizeMesh, size*blockSizeJ3D+i*blockSizeMesh+10475*3);
+              allVertices.push(vertices);
+              const normals = data.subarray(size*blockSizeJ3D+i*blockSizeMesh+10475*3, size*blockSizeJ3D+i*blockSizeMesh+10475*3*2);
+              allNormals.push(normals);
+            }
+            
+            const result = [allKeypoints, framesId[frame], allVertices, allNormals];
+            stillFetching = false;
+            return result;
+          } else {
+            const res = await fetchRangeURL(URLbin, position*blockSize*4, (position*blockSize+size*blockSizeJ3D)*4-1);
+            const data = new Float32Array(res);
+            const allKeypoints = []
+            for (let i=0; i < framesId[frame].length; i++) {
+              const keypoints = ToVertices(data.subarray(i*blockSizeJ3D, (i+1)*blockSizeJ3D));
+              allKeypoints.push(keypoints);
+            }
+            
+            const result = [allKeypoints, framesId[frame]];
+            stillFetching = false;
+            return result;
+          }
+        } catch (error) {
+          console.error("Error fetching frame:", error);
+          stillFetching = false;
+          throw error;
+        }
+      }
+
+      function nextFrame() {
+        if (params.currentFrame < (totalFrameNumber-1)) {
+          params.currentFrame += 1;
+          params.currentFrameFloat = params.currentFrame;
+          clock.elapsedTime = params.currentFrame * frameDuration;
+          if (useVideo && video) video.currentTime = clock.elapsedTime;
+          updateFrame(params.currentFrame, params.displayMeshes, true);
+        }
+      }
+
+      function previousFrame() {
+        if (params.currentFrame > 0) {
+          params.currentFrame -= 1;
+          params.currentFrameFloat = params.currentFrame;
+          clock.elapsedTime = params.currentFrame * frameDuration;
+          if (useVideo && video) video.currentTime = clock.elapsedTime;
+          updateFrame(params.currentFrame, params.displayMeshes, true);
+        }
+      }
+
+      function playPauseAnimation() {
+        if (isAnimating) {
+          isAnimating = false;
+          params.savedPausedTime = clock.elapsedTime;
+          if (useVideo && video) video.pause();
+          clock.stop();
+        } else {
+          isAnimating = true;
+          clock.start();
+          clock.elapsedTime = params.savedPausedTime;
+          if (useVideo && video) {
+            video.currentTime = params.savedPausedTime;
+            video.play();
+          }
+        }
+      }
+
+      async function updateFrame(frame, updateMesh, updateDisplay) {
+        try {
+          const data = await fetchFrameURL(frame, updateMesh);
+          updateURL(data, updateMesh);
+          updateCameraHelper(frame);
+          if (updateDisplay) {
+            currentFrameGUI.updateDisplay();
+          }
+        } catch (error) {
+          console.error("Error updating frame:", error);
+        }
+      }
+
+      function updateURL(data, updateMesh) {
+        updateSkeletons(data[0], data[1], maxHumans, skeletonsArrayWithId, skeletonsArrayWithoutId);
+        if (updateMesh) {
+          updateBodiesWithNormals(data[2], data[3], data[1], maxHumans, bodiesArrayWithId, bodiesArrayWithoutId);
+        }
+      }
+
+      /*===================================
+      =            Camera Functions       =
+      ===================================*/
+      
+      function setOrbitAngles(polar, azimuth, distance) {
+        const center = controls.target;
+        const newPos = new THREE.Vector3().setFromSphericalCoords(distance, polar, azimuth);
+        controls.object.position.copy(center).add(newPos);
+      }
+
+      function initCameraHelper(cameraPositions, cameraRotations, cameraFovs) {
+        cameraGroup = new THREE.Group();
+        cameraSubGroup = new THREE.Group();
+        cameraGroup.add(cameraSubGroup);
+
+        // Camera body
+        const cameraBody = new THREE.Mesh(
+          new THREE.BoxGeometry(0.125, 0.1, 0.1),
+          new THREE.MeshLambertMaterial({ color: 0xdddddd })
+        );
+
+        // Camera lens
+        const lens = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.04, 0.04, 0.06, 20),
+          new THREE.MeshLambertMaterial({ color: 0x884444 })
+        );
+        lens.rotation.x = Math.PI / 2;
+        lens.position.z = -0.08;
+
+        // Field of view wireframe
+        const fovAngle = Math.PI / 6;
+        const fovLength = 0.3;
+        const sx = fovLength * Math.sin(fovAngle);
+        const sy = fovLength * Math.sin(fovAngle);
+        const sz = -fovLength * Math.cos(fovAngle);
+
+        const vertices = new Float32Array([
+          // Apex to corners
+          0, 0, 0,   sx,  sy, sz,
+          0, 0, 0,   sx, -sy, sz,
+          0, 0, 0,  -sx,  sy, sz,
+          0, 0, 0,  -sx, -sy, sz,
+          // Base rectangle
+           sx,  sy, sz,   sx, -sy, sz,
+           sx, -sy, sz,  -sx, -sy, sz,
+          -sx, -sy, sz,  -sx,  sy, sz,
+          -sx,  sy, sz,   sx,  sy, sz
+        ]);
+        
+        const fovGeometry = new THREE.BufferGeometry();
+        fovGeometry.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+        const fovLines = new THREE.LineSegments(
+          fovGeometry,
+          new THREE.LineBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.5 })
+        );
+
+        cameraSubGroup.add(cameraBody, lens, fovLines);
+        scene.add(cameraGroup);
+        cameraGroup.visible = params.displayCamera;
+      }
+
+      function updateCameraHelper(frameIndex) {
+        if (!cameraGroup || !cameraSubGroup) return;
+        if (cameraPositions && cameraPositions[frameIndex] && cameraRotations && cameraRotations[frameIndex]) {
+          const position = cameraPositions[frameIndex];
+          const rotation = cameraRotations[frameIndex];
+          cameraSubGroup.position.set(position[0], position[1], position[2]);
+          cameraSubGroup.rotation.order = 'ZYX';
+          cameraSubGroup.rotation.set(rotation[0], -rotation[1], -rotation[2]);
+        }
+      }
+
+      function updateSliders() {
+        if (!controls) return;
+        const pos = controls.object.position.clone().sub(controls.target);
+        const spherical = new THREE.Spherical().setFromVector3(pos);
+        
+        // Round values to 2 decimal places
+        cameraParams.polarAngle = Math.round(THREE.MathUtils.radToDeg(spherical.phi) * 100) / 100;
+        cameraParams.azimuthAngle = Math.round(THREE.MathUtils.radToDeg(spherical.theta) * 100) / 100;
+        cameraParams.targetX = Math.round(controls.target.x * 100) / 100;
+        cameraParams.targetY = Math.round(controls.target.y * 100) / 100;
+        cameraParams.targetZ = Math.round(controls.target.z * 100) / 100;
+        cameraParams.distance = Math.round(controls.getDistance() * 100) / 100;
+      }
+
+      function loadCameraSettings() {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json';
+        input.onchange = (event) => {
+          const file = event.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const data = JSON.parse(e.target.result);
+              cameraParams = { 
+                targetX: data.targetX ?? cameraParams.targetX,
+                targetY: data.targetY ?? cameraParams.targetY,
+                targetZ: data.targetZ ?? cameraParams.targetZ,
+                distance: data.distance ?? cameraParams.distance,
+                polarAngle: data.polarAngle ?? cameraParams.polarAngle,
+                azimuthAngle: data.azimuthAngle ?? cameraParams.azimuthAngle,
+              };
+              controls.target.set(cameraParams.targetX, cameraParams.targetY, cameraParams.targetZ);
+              setOrbitAngles(
+                THREE.MathUtils.degToRad(cameraParams.polarAngle),
+                THREE.MathUtils.degToRad(cameraParams.azimuthAngle),
+                cameraParams.distance
+              );
+              controls.update();
+              console.log("Camera settings loaded successfully.");
+            } catch (error) {
+              console.error("Error loading camera settings:", error);
+            }
+          };
+          reader.readAsText(file);
+        };
+        input.click();
+      }
+
+      function saveCameraSettings() {
+        const dataToSave = { ...cameraParams };
+        const jsonString = JSON.stringify(dataToSave, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = 'camera_settings.json';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        console.log("Camera settings saved successfully.");
+      }
+
+      /*===================================
+      =            XR Functions           =
+      ===================================*/
+      
+      function enterXR(enter) {
+        if (enter) {
+          console.log("Entering XR");
+          updateCheckerboard(true);
+        } else {
+          console.log("Exiting XR");  
+          updateCheckerboard(false);
+        }
+      }
+      
+      function enterVR(enter) {
+        if (enter) {
+          console.log("Entering VR");
+        } else {
+          console.log("Exiting VR");  
+        }
+      }
+
+      /*===================================
+      =            Track Controls         =
+      ===================================*/
+      
+      function addTrackToggles() {
+        if (!allTracksGroup || !allTracksGroup.children.length) return;
+        
+        controlTracksGUI = new GUI({ title: "Track Controls", autoPlace: false });
+        controlTracksGUI.domElement.style.position = "fixed";
+        controlTracksGUI.domElement.style.left = "-10px";
+        controlTracksGUI.domElement.style.top = "0px";
+        document.body.appendChild(controlTracksGUI.domElement);
+        
+        allTracksGroup.children.forEach((track, index) => {
+          const poseId = track.userData.poseId;
+          const key = (poseId !== undefined) ? poseId : index;
+          const trackObj = { visible: window.trackVisibility[key] ?? track.visible };
+          
+          const controller = controlTracksGUI.add(trackObj, "visible")
+            .name("Track " + key)
+            .onChange((value) => {
+              track.visible = value;
+              window.trackVisibility[key] = value;
+              fetchFrameURL(params.currentFrame, params.displayMeshes).then((data) => {
+                updateSkeletons(data[0], data[1], maxHumans, skeletonsArrayWithId, skeletonsArrayWithoutId);
+                if (params.displayMeshes) {
+                  updateBodiesWithNormals(data[2], data[3], data[1], maxHumans, bodiesArrayWithId, bodiesArrayWithoutId);
+                }
+              });
+            });
+            
+          if (controller?.domElement) {
+            const colorHex = '#' + idColors[(key+1) % idColors.length].toString(16).padStart(6, '0');
+            controller.domElement.style.color = colorHex;
+          }
+        });
+      }
+
+      /*===================================
+      =            Initialization         =
+      ===================================*/
+      
+      function init() {
+        // Setup core Three.js components
+        clock = new THREE.Clock();
+        scene = new THREE.Scene();
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 500);
+        renderer = new THREE.WebGLRenderer({ samples: 4, antialias: true });
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(params.backgroundColor);
+        document.body.appendChild(renderer.domElement);
+
+        // Setup orbit controls
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 0, -5);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.1;
+        controls.maxDistance = 20;
+        controls.minDistance = 1;
+        
+        // Initialize main components
+        initTHREE(renderer, scene, camera, controls);
+
+        // Setup XR if enabled
+        Promise.resolve(enableXR).then(xrSupported => {
+          if (xrSupported) {
+            document.body.appendChild(XRButton.createButton(renderer, {}, enterXR));
+            document.body.appendChild(VRButton.createButton(renderer, {}, enterVR));
+
+            controller1 = renderer.xr.getController(0);
+            scene.add(controller1);
+
+            controller2 = renderer.xr.getController(1);
+            scene.add(controller2);
+
+            const controllerModelFactory = new XRControllerModelFactory();
+
+            controllerGrip1 = renderer.xr.getControllerGrip(0);
+            controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
+            scene.add(controllerGrip1);
+
+            controllerGrip2 = renderer.xr.getControllerGrip(1);
+            controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
+            scene.add(controllerGrip2);
+            
+            console.log("XR/VR support detected and enabled");
+          } else {
+            console.log("XR/VR not supported by this browser");
+          }
+        });
+
+        // Load data and initialize scene
+        fetchInfosURL(URLjson).then((data) => {
+          totalFrameNumber = data["totalFrameNumber"];
+          maxHumans = data["maxHumans"];
+          notempty = data["notempty"];
+          smplx_faces = data["smplx_faces"];
+          framesId = data["framesId"];
+          FPS = data["video_fps"];
+          if (FPS == 0) FPS = 30;
+          frameDuration = 1 / FPS;
+          // Load camera parameters if available
+          cameraFovs = data["camera_fovs"];
+          cameraRotations = data["camera_rotations"];
+          cameraPositions = data["camera_positions"];
+          params.cameraRotationX = data["camera_rotation_deg"][0];
+          params.cameraRotationY = data["camera_rotation_deg"][1];
+          params.globalZOffset = data["floor_Zoffset"];
+          min_xyz = data["keypoints_min"];
+          max_xyz = data["keypoints_max"];
+
+          keypoints_max = Math.max(Math.abs(min_xyz[0]), Math.abs(max_xyz[0]), Math.abs(min_xyz[2]), Math.abs(max_xyz[2]));
+
+          document.title = "Visualization: " + baseName;
+          // Apply global rotation if provided
+          if ('rotation' in data) {
+            const rotation = data["rotation"];
+            if (rotation !== 0) params.globalRotation = rotation;
+          }
+          
+          // Apply offset if provided
+          if ('offset' in data) {
+            const Zoffset = data["offset"];
+            if (Zoffset !== 0) {
+              params.globalZOffset = Zoffset;
+              params.globalZOffset = -1 - Zoffset;
+            }
+          }
+
+          // Calculate frame positions
+          let count = 0;
+          for (let i = 0; i < framesId.length; i++) {
+            framesIdPositions.push(count);
+            count += framesId[i].length;
+          }
+
+          // Initialize track visibility
+          window.trackVisibility = {};
+          
+          // Create GUI controls
+          initGUI(data);
+          
+          // Initialize tracks if available
+          if (data["allTracks"] && data["allTracks"].length > 0) {
+            allTracksGroup = new THREE.Group();
+            addAllTracks(data["allTracks"], 0, allTracksGroup, params, scene);
+            
+            // Initialize track visibility settings
+            if (allTracksGroup && allTracksGroup.children) {
+              allTracksGroup.children.forEach((track, index) => {
+                const poseId = track.userData.poseId;
+                const key = (poseId !== undefined) ? poseId : index;
+                window.trackVisibility[key] = true;
+              });
+            }
+            
+            allTracksGroup.visible = params.displayTracks;
+            scene.add(allTracksGroup);
+            
+            // Add track toggle controls
+            addTrackToggles();
+          }
+
+          // Initialize skeletons and bodies
+          fetchFrameURL(notempty, true).then((data) => {
+            // Initialize skeletons
+            allSkeletonsGroup = new THREE.Group();
+            initSkeletons(maxHumans, allSkeletonsGroup, params, scene, 
+                          skeletonsArrayWithId, skeletonsArrayWithoutId);
+
+            // Initialize bodies
+            allBodiesGroup = new THREE.Group();
+            initBodies(maxHumans, allBodiesGroup, params, scene, 
+                      bodiesArrayWithId, bodiesArrayWithoutId, smplx_faces);
+
+            // Add checkerboard
+            let boardSize = 25, squareSize = 1;
+
+            if (boardSize<(2*keypoints_max)) {
+              boardSize = Math.ceil(2*keypoints_max);
+            }
+
+            addCheckerboard(scene, boardSize, squareSize, 1);
+            
+            // Update checkerboard materials with current colors
+            if (checkerboardMaterial1) checkerboardMaterial1.color.setHex(params.checkerboardColor1);
+            if (checkerboardMaterial2) checkerboardMaterial2.color.setHex(params.checkerboardColor2);
+            
+            // Initialize camera helper
+            initCameraHelper(cameraPositions, cameraRotations, cameraFovs);
+            
+            // Update to initial frame
+            updateFrame(params.currentFrame, params.displayMeshes, false);
+          });
+        });
+
+        // Initialize video if specified
+        if (useVideo) {
+          video = document.createElement('video');
+          video.src = URLVideo;
+          video.load();
+          video.muted = true;
+          video.loop = true;
+          video.preload = 'auto';
+          video.crossOrigin = 'anonymous'; // Add this for cross-origin videos
+
+          video.onloadeddata = function() {
+            videoTexture = new THREE.VideoTexture(video);
+            videoTexture.generateMipmaps = false;
+            videoTexture.format = THREE.RGBAFormat;
+            videoTexture.colorSpace = THREE.SRGBColorSpace;
+
+            // helper to actually build the plane
+            const createVideoPlane = () => {
+              video.pause();
+              video.currentTime = 0;
+              videoTexture.needsUpdate = true;
+
+              const aspect = video.videoHeight / video.videoWidth;
+              const geometry = new THREE.PlaneGeometry(1, aspect);
+              const material = new THREE.MeshBasicMaterial({ map: videoTexture, side: THREE.DoubleSide });
+              plan = new THREE.Mesh(geometry, material);
+              plan.position.z = -keypoints_max-2.5;
+              plan.position.y = 4 * aspect;
+              plan.scale.set(8, 8, 8);
+              plan.receiveShadow = false;
+              plan.castShadow = false;
+              scene.add(plan);
+
+              params.displayVideo = true;
+            };
+
+            // play briefly so first frame is decoded, then hook into the browser’s frame callback
+            video.playbackRate = params.speedMultiplier;
+            video.play().then(() => {
+              if (typeof video.requestVideoFrameCallback === 'function') {
+                video.requestVideoFrameCallback(() => createVideoPlane());
+              } else {
+                // Firefox < 109 fallback
+                setTimeout(() => createVideoPlane(), 200);
+              }
+            }).catch(err => console.error("Video play failed:", err));
+          };
+        }
+
+        // Add event listeners
+        window.addEventListener("resize", onWindowResize);
+        window.addEventListener("keydown", onDocumentKeyDown);
+        controls.addEventListener("change", updateSliders);
+        
+        // Update window size indicator
+        updateWindowSizeIndicator();
+      }
+
+      /*===================================
+      =            GUI Setup              =
+      ===================================*/
+      
+      function initGUI(data) {
+        // Setup frame control functions
+        const frameObj = {
+          getMeshes: function() {
+            fetchFrameURL(params.currentFrame, true).then((data) => {
+              allBodiesGroup.visible = true;
+              updateBodiesWithNormals(data[2], data[3], data[1], maxHumans, bodiesArrayWithId, bodiesArrayWithoutId);    
+            });
+          },
+          hideMeshes: function() {
+            allBodiesGroup.visible = false;
+          },      
+          playPauseAnimation: playPauseAnimation,
+          stopAnimation: function() {
+            isAnimating = false;
+            clock.stop();
+            clock.elapsedTime = 0;
+            params.currentFrame = 0;
+            params.currentFrameFloat = 0;
+            params.savedPausedTime = 0;
+            if (useVideo && video) {
+              video.pause();
+              video.currentTime = 0;
+            }
+            updateFrame(params.currentFrame, params.displayMeshes, true);
+          },
+          nextFrame: nextFrame,
+          previousFrame: previousFrame,
+          takeScreenshot: function() {
+            renderer.render(scene, camera);
+            const dataURL = renderer.domElement.toDataURL("image/png");
+            const a = document.createElement("a");
+            a.href = dataURL;
+            a.download = `pose3d-${String(counter).padStart(3, '0')}.png`;
+            a.click(); 
+            counter += 1;
+          },
+          resetCounter: function() {
+            counter = 0;
+          },
+          loadCamera: loadCameraSettings,
+          saveCamera: saveCameraSettings
+        };
+
+        // Create main GUI
+        gui = new GUI();
+        
+        // Frame control
+        const frameGUI = gui.addFolder("Frame"); 
+        currentFrameGUI = frameGUI
+          .add(params, "currentFrame", 0, totalFrameNumber-1, 1)
+          .name("Frame")
+          .listen()
+          .onChange(function(value) {
+            params.currentFrame = value;
+            params.currentFrameFloat = value;
+            clock.elapsedTime = params.currentFrame * frameDuration;
+            if (useVideo && video) video.currentTime = clock.elapsedTime;
+            updateFrame(params.currentFrame, params.displayMeshes, false);
+          });
+        frameGUI.add(frameObj, "playPauseAnimation").name("Play/Pause");
+        frameGUI.add(frameObj, "stopAnimation").name("Stop");          
+        frameGUI.add(frameObj, "nextFrame").name("Next Frame");
+        frameGUI.add(frameObj, "previousFrame").name("Previous Frame");
+        frameGUI.add(params, "speedMultiplier", { "1/4": 0.25, "1/2": 0.5, "x1": 1, "x2": 2, "x4": 4 })
+          .name("Speed Multiplier")
+          .listen()
+          .onChange((value) => {
+            if (video) video.playbackRate = value;
+          });
+   
+        // Display controls
+        const displayGUI = gui.addFolder("Display");
+        displayGUI
+          .add(params, "displayCheckerboard")
+          .name("Display Checkerboard")
+          .listen()
+          .onChange(function() {
+            checkerboardGroup.visible = params.displayCheckerboard;
+          });
+        displayGUI
+          .add(params, "displaySkeletons")
+          .name("Display Skeletons")
+          .listen()
+          .onChange(function() {
+            allSkeletonsGroup.visible = params.displaySkeletons;
+          });  
+        displayGUI
+          .add(params, "displayMeshes")
+          .name("Display Bodies")
+          .listen()
+          .onChange(function() {
+            allBodiesGroup.visible = params.displayMeshes;
+          });
+        displayGUI
+          .add(params, "displayCamera")
+          .name("Display Camera")
+          .listen()
+          .onChange(function() {
+            if (cameraGroup) cameraGroup.visible = params.displayCamera;
+          });
+          
+        if (useVideo) {
+          displayGUI
+            .add(params, "displayVideo")
+            .name("Display Video")
+            .listen()
+            .onChange(function() {
+              if (plan) plan.visible = params.displayVideo;
+              if (params.displayVideo && isAnimating && video) {
+                video.currentTime = clock.elapsedTime;
+                video.play();
+              } else if (video) {
+                video.pause();
+              }
+            });
+        }
+          
+        displayGUI
+          .add(params, "displayTracks")
+          .name("Display Tracks")
+          .listen()
+          .onChange(function() {
+            if (allTracksGroup) allTracksGroup.visible = params.displayTracks;
+          });
+          
+          displayGUI
+          .add(params, "meshesOpacity", 0, 1, 0.01)
+          .name("Bodies Opacity")
+          .listen()
+          .onChange(function(value) {
+            if (allBodiesGroup !== null) {
+              if (value < 1) {
+                allBodiesGroup.children.forEach((mesh) => {
+                  mesh.material.transparent = true;
+                  mesh.material.opacity = value;
+                });
+              } else {
+                allBodiesGroup.children.forEach((mesh) => {
+                  mesh.material.transparent = false;
+                  mesh.material.opacity = 1;
+                });
+              }
+            }
+          });
+
+        // Camera controls
+        const cameraGUI = gui.addFolder("Camera Properties");
+        cameraGUI.add(cameraParams, "targetX", -10, 10, 0.01)
+          .name("Target X")
+          .listen()
+          .onChange((val) => { controls.target.x = val; controls.update(); });
+        cameraGUI.add(cameraParams, "targetY", -10, 10, 0.01)
+          .name("Target Y")
+          .listen()
+          .onChange((val) => { controls.target.y = val; controls.update(); });
+        cameraGUI.add(cameraParams, "targetZ", -10, 10, 0.01)
+          .name("Target Z")
+          .listen()
+          .onChange((val) => { controls.target.z = val; controls.update(); });
+        cameraGUI.add(cameraParams, "distance", 0.1, 50, 0.01)
+          .name("Distance")
+          .listen()
+          .onChange((val) => {
+            const center = controls.target.clone();
+            const direction = controls.object.position.clone().sub(center).normalize();
+            controls.object.position.copy(center.addScaledVector(direction, val));
+            controls.update();
+          });
+        cameraGUI.add(cameraParams, "polarAngle", 0, 180, 0.1)
+          .name("Polar (°)")
+          .listen()
+          .onChange((val) => {
+            setOrbitAngles(
+              THREE.MathUtils.degToRad(val), 
+              THREE.MathUtils.degToRad(cameraParams.azimuthAngle),
+              cameraParams.distance
+            );
+            controls.update();
+          });
+        cameraGUI.add(cameraParams, "azimuthAngle", -180, 180, 0.1)
+          .name("Azimuth (°)")
+          .listen()
+          .onChange((val) => {
+            setOrbitAngles(
+              THREE.MathUtils.degToRad(cameraParams.polarAngle), 
+              THREE.MathUtils.degToRad(val),
+              cameraParams.distance
+            );
+            controls.update();
+          });
+          
+        // Screenshot controls  
+        const screenshotGUI = gui.addFolder("Media");
+        screenshotGUI.add(frameObj, "takeScreenshot").name("Take Screenshot");
+        screenshotGUI.add(frameObj, "resetCounter").name("Reset Screenshot Counter");
+        
+        // Colors
+        const colorsGUI = gui.addFolder("Colors");
+        colorsGUI.addColor(params, "backgroundColor")
+          .name("Background Color")
+          .onChange((value) => { renderer.setClearColor(value); });
+        colorsGUI.addColor(params, "checkerboardColor1")
+          .name("Checkerboard Light")
+          .onChange((value) => { 
+            if (checkerboardMaterial1) checkerboardMaterial1.color.setHex(value); 
+          });
+        colorsGUI.addColor(params, "checkerboardColor2")
+          .name("Checkerboard Dark")
+          .onChange((value) => { 
+            if (checkerboardMaterial2) checkerboardMaterial2.color.setHex(value); 
+          });
+      }
+
+      /*===================================
+      =            Animation Loop         =
+      ===================================*/
+      
+      function animate() {
+        renderer.setAnimationLoop(render);
+      }
+
+      function render() {
+        if (controls) controls.update();
+   
+        if (isAnimating) {
+          const deltaTime = clock.getDelta() * params.speedMultiplier;
+          const actualFrame = params.currentFrame;
+          params.currentFrameFloat += deltaTime * FPS;
+          const targetFrame = Math.floor(params.currentFrameFloat);
+          
+          if (!stillFetching && targetFrame != actualFrame) {
+            params.currentFrame = targetFrame;
+            if (params.currentFrameFloat >= totalFrameNumber) {
+              params.currentFrame = 0;
+              params.currentFrameFloat = 0;
+              if (useVideo && video) video.currentTime = 0;
+              clock.elapsedTime = 0;
+            }
+            updateFrame(params.currentFrame, params.displayMeshes, true);
+          }
+        }
+        
+        renderer.render(scene, camera);
+        if (stats) stats.update();
+      }
+
+      /*===================================
+      =            Event Handlers         =
+      ===================================*/
+      
+      function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        updateWindowSizeIndicator();
+      }
+
+      function updateWindowSizeIndicator() {
+        windowSizeIndicator.textContent = `${window.innerWidth} × ${window.innerHeight}`;
+      }
+
+      function onDocumentKeyDown(event) {
+        var keyCode = event.which;
+        if (keyCode === 39) { // -> key
+            nextFrame();
+        } else if (keyCode === 37) { // <- key
+            previousFrame();
+        } else if (keyCode === 32) { // Space key
+            playPauseAnimation();
+        }
+      }
+
+      // Initialize on load
+      window.addEventListener("load", () => {
+        console.log("Page fully loaded, initializing application");
+        init();
+        animate();
+      });
+    </script>
+  </body>
+</html>
