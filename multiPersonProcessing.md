@@ -1,4 +1,6 @@
-# Multi-Person Processing Pipeline Documentation
+# MultiPerson Processing Pipeline Documentation
+
+![MultiPerson Pipeline Overview](MultiPerson-Pipeline.svg)
 
 ## 1. Overview
 
