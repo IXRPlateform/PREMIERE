@@ -25,16 +25,20 @@ export MODELS_PATH="MODELS_DIR"
 Meta-scripts
 ------------
 
-[premiereFullVideoProcessing](premiereFullVideoProcessing.md) for detailed pipeline documentation.
+See [premiereFullVideoProcessing.md](premiereFullVideoProcessing.md) for the full [PREMIERE-Pipeline](premiereFullVideoProcessing.py) script documentation.
+
+See [multiPersonProcessing.md](multiPersonProcessing.md) for the [MultiPerson-Pipeline](multiPersonProcessing.py) script documentation.
 
 
-
-Usage
+Simple Usage
 ------------
 
-Simple processing
 
 ```py
 python premiereFullVideoProcessing.py --video ../videos/D0-21.mp4 --directory ../results/D0-21
+```
+
+```py
+python multiPersonProcessing.py --video ../videos/D0-21.mp4 --directory ../results/D0-21
 ```
 
