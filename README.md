@@ -1,4 +1,4 @@
-# PREMIERE Processing Graph
+# PREMIERE Project Processing Pipelines
 
 Installation
 ------------
