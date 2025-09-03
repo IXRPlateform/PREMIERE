@@ -14,6 +14,9 @@ conda install conda-forge::ffmpeg
 pip install -r requirement.txt
 ```
 
+Tested on Linux Ubuntu 22.04, 24.04 and Windows 11.
+Works with an NVIDIA GPU (ampere architecture or higher) with at least 16GB of VRAM.
+
 ## Model Checkpoints
 ------------
 
