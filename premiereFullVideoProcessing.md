@@ -1,4 +1,4 @@
-# premiereFullVideoProcessing Documentation
+# PREMIERE Full Processing Pipeline Documentation
 
 ## 1. Overview
 

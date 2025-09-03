@@ -1,4 +1,4 @@
-# Processing Pipeline Documentation
+# PREMIERE Processing Pipeline Documentation
 
 ![PREMIERE-Pipeline Overview](PREMIERE-Pipeline.svg)
 

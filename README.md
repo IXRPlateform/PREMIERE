@@ -1,5 +1,4 @@
 # PREMIERE Processing Graph
-======
 
 Installation
 ------------
@@ -42,3 +41,8 @@ python premiereFullVideoProcessing.py --video ../videos/D0-21.mp4 --directory ..
 python multiPersonProcessing.py --video ../videos/D0-21.mp4 --directory ../results/D0-21
 ```
 
+
+ounding
+------------
+
+This work was supported by the HORIZON-CL2-2021-HERITAGE-000201-04 under Grant number 101061303 - PREMIERE
