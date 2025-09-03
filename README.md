@@ -1,7 +1,9 @@
 # End-to-End Pipelines for Scalable 3D Motion Mining in Dance Archives from Monocular Footage
 [![Website](https://www.couleur.org/PREMIERE/JMTA/website.svg)](https://www.couleur.org/PREMIERE/JMTA/)
 
-Installation
+## 📖 Overview
+
+## 🌍 Installation
 ------------
 
 ```py
@@ -12,7 +14,7 @@ conda install conda-forge::ffmpeg
 pip install -r requirement.txt
 ```
 
-Models
+## Model Checkpoints
 ------------
 
 ```
@@ -22,7 +24,7 @@ then
 export MODELS_PATH="MODELS_DIR"
 ```
 
-Meta-scripts
+## Meta-scripts
 ------------
 
 See [premiereFullVideoProcessing.md](premiereFullVideoProcessing.md) for the full [PREMIERE-Pipeline.oy](premiereFullVideoProcessing.py) script documentation.
@@ -30,7 +32,7 @@ See [premiereFullVideoProcessing.md](premiereFullVideoProcessing.md) for the ful
 See [multiPersonProcessing.md](multiPersonProcessing.md) for the [MultiPerson-Pipeline.py](multiPersonProcessing.py) script documentation.
 
 
-Simple Usage
+## Simple Usage
 ------------
 
 
@@ -43,7 +45,7 @@ python multiPersonProcessing.py --video ../videos/D0-21.mp4 --directory ../resul
 ```
 
 
-ounding
+## Funding
 ------------
 
 This work was supported by the HORIZON-CL2-2021-HERITAGE-000201-04 under Grant number 101061303 - PREMIERE
