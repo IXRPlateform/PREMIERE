@@ -22,6 +22,12 @@ then
 export MODELS_PATH="MODELS_DIR"
 ```
 
+Meta-scripts
+------------
+
+[premiereFullVideoProcessing](premiereFullVideoProcessing.md) for detailed pipeline documentation.
+
+
 
 Usage
 ------------

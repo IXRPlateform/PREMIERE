@@ -1,7 +1,5 @@
 # premiereFullVideoProcessing Documentation
 
-![PREMIERE-Pipeline Overview](PREMIERE-Pipeline.svg)
-
 ## 1. Overview
 
 This script orchestrates scene detection, splitting, and processing operations for video files. It performs the following main functions:

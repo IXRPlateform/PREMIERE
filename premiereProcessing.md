@@ -1,5 +1,7 @@
 # Processing Pipeline Documentation
 
+![PREMIERE-Pipeline Overview](PREMIERE-Pipeline.svg)
+
 ## 1. Overview
 
 This script orchestrates a multi-step pipeline for analyzing videos. It includes VGGT and MoGe analysis, 3D pose estimation, segmentation, optional shadow removal, tracking, outlier filtering, and camera compensation. Each step is controlled via command-line arguments, allowing for flexible execution.
