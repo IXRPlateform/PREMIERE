@@ -16,7 +16,7 @@ pip install -r requirement.txt
 
 Tested on Linux Ubuntu 22.04, 24.04 and Windows 11.
 
-Works with an NVIDIA GPU (ampere architecture or higher) with at least 16GB of VRAM.
+Works with a NVIDIA GPU (ampere architecture or higher) with at least 16GB of VRAM.
 
 ## Model Checkpoints
 ------------
@@ -24,7 +24,9 @@ Works with an NVIDIA GPU (ampere architecture or higher) with at least 16GB of V
 ```
 wget https://www.couleur.org/premiere-files/models.zip
 unzip to MODELS_DIR
-then
+```
+then add the following 
+```
 export MODELS_PATH="MODELS_DIR"
 ```
 
