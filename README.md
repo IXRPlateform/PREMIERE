@@ -1,5 +1,5 @@
 # End-to-End Pipelines for Scalable 3D Motion Mining in Dance Archives from Monocular Footage
-[![Website](https://www.couleur.org/PREMIERE/JMTA/)](https://www.couleur.org/PREMIERE/JMTA/)
+[![Website](https://www.couleur.org/PREMIERE/JMTA/website.svg)](https://www.couleur.org/PREMIERE/JMTA/)
 
 Installation
 ------------
