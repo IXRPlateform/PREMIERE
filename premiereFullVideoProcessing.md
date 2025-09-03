@@ -1,7 +1,6 @@
 # premiereFullVideoProcessing Documentation
 
-![PREMIERE Pipeline Overview](PREMIERE-Pipeline.svg)
-
+![PREMIERE-Pipeline Overview](PREMIERE-Pipeline.svg)
 
 ## 1. Overview
 
