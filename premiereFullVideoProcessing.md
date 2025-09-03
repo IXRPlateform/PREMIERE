@@ -6,7 +6,7 @@ This script orchestrates scene detection, splitting, and processing operations f
 
 1. Detects scenes in a video using PySceneDetect (ContentDetector or AdaptiveDetector)
 2. Splits the video into scene-based sub-videos
-3. Optionally processes each scene by calling `premiereProcessing.py` script
+3. Optionally processes each scene by calling `premiereProcessing.py` script (see [premiereProcessing.md](premiereProcessing.md))
 4. Optionally fuses the resulting .pkl files across scenes into a single set of files
 
 The script can be run in various modes to handle different parts of the pipeline independently, allowing for scene generation only, scene processing only, or fusion of processed data from multiple scenes.

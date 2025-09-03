@@ -25,9 +25,9 @@ export MODELS_PATH="MODELS_DIR"
 Meta-scripts
 ------------
 
-See [premiereFullVideoProcessing.md](premiereFullVideoProcessing.md) for the full [PREMIERE-Pipeline](premiereFullVideoProcessing.py) script documentation.
+See [premiereFullVideoProcessing.md](premiereFullVideoProcessing.md) for the full [PREMIERE-Pipeline.oy](premiereFullVideoProcessing.py) script documentation.
 
-See [multiPersonProcessing.md](multiPersonProcessing.md) for the [MultiPerson-Pipeline](multiPersonProcessing.py) script documentation.
+See [multiPersonProcessing.md](multiPersonProcessing.md) for the [MultiPerson-Pipeline.py](multiPersonProcessing.py) script documentation.
 
 
 Simple Usage
