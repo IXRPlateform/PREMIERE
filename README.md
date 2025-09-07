@@ -11,6 +11,9 @@ Digital dance and theater archives are difficult to search and study because few
 	<img src="MultiPerson-Pipeline.svg" alt="MultiPerson Pipeline Overview" style="height:220px;">
 	<img src="PREMIERE-Pipeline.svg" alt="PREMIERE-Pipeline Overview" style="height:220px;">
 </div>
+<div align="center" style="margin-top: 8px; font-size: 15px; color: #555;">
+<em>Left – MultiPerson Pipeline. Right – PREMIERE Pipeline.</em>
+</div>
 
 
 ## 🌍 Installation
@@ -48,9 +51,9 @@ set MODELS_PATH="MODELS_DIR"
 ## Meta-scripts
 ------------
 
-See [premiereFullVideoProcessing.md](premiereFullVideoProcessing.md) for the full [PREMIERE-Pipeline.py](premiereFullVideoProcessing.py) script documentation.
+See [premiereFullVideoProcessing.md](premiereFullVideoProcessing.md) for the full [PREMIERE-Pipeline](premiereFullVideoProcessing.py) script documentation.
 
-See [multiPersonProcessing.md](multiPersonProcessing.md) for the [MultiPerson-Pipeline.py](multiPersonProcessing.py) script documentation.
+See [multiPersonProcessing.md](multiPersonProcessing.md) for the [MultiPerson-Pipeline](multiPersonProcessing.py) script documentation.
 
 
 ## Simple Usage
