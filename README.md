@@ -1,7 +1,17 @@
 # End-to-End Pipelines for Scalable 3D Motion Mining in Dance Archives from Monocular Footage
 [![Website](https://www.couleur.org/PREMIERE/JMTA/website.svg)](https://www.couleur.org/PREMIERE/JMTA/)
 
+
 ## 📖 Overview
+
+Digital dance and theater archives are difficult to search and study because few tools can accurately extract 3D motion from the monocular, often degraded footage that dominates heritage collections. We present two cloud-ready pipelines dedicated to the [PREMIERE Horizon project](https://premiere-project.eu/) that transform these videos into temporally dense SMPL-X reconstructions, per-frame segmentation masks, depth maps, and estimated camera trajectories.
+
+
+<div style="display: flex; gap: 16px; align-items: flex-start;">
+	<img src="MultiPerson-Pipeline.svg" alt="MultiPerson Pipeline Overview" style="height:220px;">
+	<img src="PREMIERE-Pipeline.svg" alt="PREMIERE-Pipeline Overview" style="height:220px;">
+</div>
+
 
 ## 🌍 Installation
 ------------
@@ -35,7 +45,6 @@ Windows:
 set MODELS_PATH="MODELS_DIR"
 ```
 
-
 ## Meta-scripts
 ------------
 
@@ -47,19 +56,35 @@ See [multiPersonProcessing.md](multiPersonProcessing.md) for the [MultiPerson-Pi
 ## Simple Usage
 ------------
 
-
 ```py
-python premiereFullVideoProcessing.py --video ../videos/D0-21.mp4 --directory ../results/D0-21
+python premiereFullVideoProcessing.py --video inputVideoFile.mp4 --directory outputDirectory
 ```
+to process a full video with the PREMIERE-Pipeline.
+
+or
 
 ```py
-python multiPersonProcessing.py --video ../videos/D0-21.mp4 --directory ../results/D0-21
+python multiPersonProcessing.py --video inputVideoFile.mp4 --directory outputDirectory
+```
+to process a video sequence with the MultiPerson-Pipeline. 
+
+## Visualization
+------------
+
+You can visualize the final outputs of theses two pipelines with our visualization script [appVisualization.py](appVisualization.py) based on Flask and [Three.js](https://threejs.org).
+
+The raw cleaned data (`nlf-final.pkl`):
+```py
+python appVisualization.py outputDirectory/nlf-final.pkl
+```
+The final filtered data (`nlf-final-filtered.pkl`):
+```py
+python appVisualization.py outputDirectory/nlf-final-filtered.pkl
 ```
 
 
 ## Funding
 ------------
 
-```
 This work was supported by the HORIZON-CL2-2021-HERITAGE-000201-04 under Grant number 101061303 - PREMIERE
-```
+
