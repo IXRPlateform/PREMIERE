@@ -23,17 +23,23 @@ Works with a NVIDIA GPU (ampere architecture or higher) with at least 16GB of VR
 
 ```
 wget https://www.couleur.org/premiere-files/models.zip
-unzip to MODELS_DIR
 ```
-then add the following 
+unzip to MODELS_DIR
+then add the following environement variable:
+Linux:
 ```
 export MODELS_PATH="MODELS_DIR"
 ```
+Windows:
+```
+set MODELS_PATH="MODELS_DIR"
+```
+
 
 ## Meta-scripts
 ------------
 
-See [premiereFullVideoProcessing.md](premiereFullVideoProcessing.md) for the full [PREMIERE-Pipeline.oy](premiereFullVideoProcessing.py) script documentation.
+See [premiereFullVideoProcessing.md](premiereFullVideoProcessing.md) for the full [PREMIERE-Pipeline.py](premiereFullVideoProcessing.py) script documentation.
 
 See [multiPersonProcessing.md](multiPersonProcessing.md) for the [MultiPerson-Pipeline.py](multiPersonProcessing.py) script documentation.
 
