@@ -4,7 +4,7 @@
 
 ## 📖 Overview
 
-Digital dance and theater archives are difficult to search and study because few tools can accurately extract 3D motion from the monocular, often degraded footage that dominates heritage collections. We present two cloud-ready pipelines dedicated to the [PREMIERE Horizon project](https://premiere-project.eu/) that transform these videos into temporally dense SMPL-X reconstructions, per-frame segmentation masks, depth maps, and estimated camera trajectories.
+Digital dance and theater archives are difficult to search and study because few tools can accurately extract 3D motion from the monocular, often degraded footage that dominates heritage collections. We present in this repo two cloud-ready pipelines dedicated to the [PREMIERE Horizon project](https://premiere-project.eu/) that transform these videos into temporally dense SMPL-X reconstructions, per-frame segmentation masks, depth maps, and estimated camera trajectories.
 
 
 <div style="display: flex; gap: 16px; align-items: flex-start;">
@@ -38,12 +38,13 @@ Works with a NVIDIA GPU (ampere architecture or higher) with at least 16GB of VR
 wget https://www.couleur.org/premiere-files/models.zip
 ```
 unzip to MODELS_DIR
-then add the following environement variable:
-Linux:
+then add the MODELS_PATH environement variable
+
+for Linux with:
 ```
 export MODELS_PATH="MODELS_DIR"
 ```
-Windows:
+For Windows with:
 ```
 set MODELS_PATH="MODELS_DIR"
 ```
