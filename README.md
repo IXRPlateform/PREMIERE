@@ -98,8 +98,6 @@ Our work builds upon several fantastic open-source projects. We'd like to expres
   * [VGGT](https://github.com/facebookresearch/vggt)
 
 
-
-
 ## Funding
 ------------
 
