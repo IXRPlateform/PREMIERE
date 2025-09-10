@@ -86,7 +86,7 @@ The final filtered data (`nlf-final-filtered.pkl`):
 python appVisualization.py outputDirectory/nlf-final-filtered.pkl
 ```
 
-## 🙏 Acknowledgements
+## Acknowledgements
 
 Our work builds upon several fantastic open-source projects. We'd like to express our gratitude to the authors of:
 
