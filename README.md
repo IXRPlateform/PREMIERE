@@ -38,13 +38,13 @@ Works with a NVIDIA GPU (ampere architecture or higher) with at least 16GB of VR
 wget https://www.couleur.org/premiere-files/models.zip
 ```
 unzip to MODELS_DIR
-then add the MODELS_PATH environement variable
+then add the MODELS_PATH environement variable with
 
-for Linux with:
+for Linux:
 ```
 export MODELS_PATH="MODELS_DIR"
 ```
-For Windows with:
+For Windows:
 ```
 set MODELS_PATH="MODELS_DIR"
 ```
