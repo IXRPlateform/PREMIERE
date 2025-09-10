@@ -86,6 +86,19 @@ The final filtered data (`nlf-final-filtered.pkl`):
 python appVisualization.py outputDirectory/nlf-final-filtered.pkl
 ```
 
+## 🙏 Acknowledgements
+
+Our work builds upon several fantastic open-source projects. We'd like to express our gratitude to the authors of:
+
+  * [NLF](https://github.com/isarandi/nlf.git)
+  * [WiLoR](https://github.com/rolpotamias/WiLoR.git)
+  * [SAM2](https://github.com/facebookresearch/sam2.git)
+  * [MuggledSAM](https://github.com/heyoeyo/muggled_sam.git)
+  * [MoGe](https://github.com/microsoft/MoGe.git)
+  * [VGGT](https://github.com/facebookresearch/vggt)
+
+
+
 
 ## Funding
 ------------
