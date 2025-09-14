@@ -37,6 +37,7 @@ Works with a NVIDIA GPU (ampere architecture or higher) with at least 16GB of VR
 ```
 wget https://www.couleur.org/premiere-files/models.zip
 ```
+
 unzip to MODELS_DIR
 then add the MODELS_PATH environement variable with
 
@@ -48,6 +49,14 @@ For Windows:
 ```
 set MODELS_PATH="MODELS_DIR"
 ```
+
+## To Download Models from official links
+------------
+All model weights used in this project are available from their respective official sources.  
+For legal and licensing reasons, please follow the official registration and download instructions to obtain the models yourself.  
+
+Detailed step-by-step instructions can be found in [Model_download_instruction.md](Model_download_instruction.md).  
+
 
 ## Meta-scripts
 ------------
