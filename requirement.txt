@@ -37,3 +37,4 @@ websockets==14.2
 easydict==1.13
 plotly==6.0.1
 colorama==0.4.6
+boto3
