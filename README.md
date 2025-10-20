@@ -94,7 +94,11 @@ The final filtered data (`nlf-final-filtered.pkl`):
 ```py
 python appVisualization.py outputDirectory/nlf-final-filtered.pkl
 ```
-
+## CMS Automation
+------------
+To run the automation execution of the whole complete pipeline via CMS refer to 
+[PremiereCMSAutomationGuide.md.](PremiereCMSAutomationGuide.md.)
+This also includes guide for execution step for semi-automation (manual modification after upload to pcloud)
 ## Acknowledgements
 
 Our work builds upon several fantastic open-source projects. We'd like to express our gratitude to the authors of:

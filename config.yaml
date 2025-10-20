@@ -1,0 +1,9 @@
+email:
+  from_addr: "sample@univ-st-etienne.fr"
+  to_addrs:
+    - "sample1.ghimire@univ-st-etienne.fr"
+    - "sample2.recipient@example.com"
+    - "sample3.recipient@example.com"
+  smtp_server: "smpt address here"
+  smtp_port: <port number here>
+  password: "<Your_Password_here>"

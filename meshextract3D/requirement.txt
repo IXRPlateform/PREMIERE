@@ -1,0 +1,6 @@
+smplx==0.1.28
+tqdm==4.67.1
+roma==1.5.1
+scipy==1.14.1
+trimesh==4.5.3
+fast-simplification==0.1.0
