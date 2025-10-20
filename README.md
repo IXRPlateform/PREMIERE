@@ -97,7 +97,7 @@ python appVisualization.py outputDirectory/nlf-final-filtered.pkl
 ## CMS Automation
 ------------
 To run the automation execution of the whole complete pipeline via CMS refer to 
-[PremiereCMSAutomationGuide.md.](PremiereCMSAutomationGuide.md.)
+[PremiereCMSAutomationGuide.md](PremiereCMSAutomationGuide.md)
 This also includes guide for execution step for semi-automation (manual modification after upload to pcloud)
 ## Acknowledgements
 
